@@ -2,7 +2,18 @@
 +c64::basic_start(entry)
 
 
-entry:
-jsr $e554 ;clear screen
-lda #$57  ;circle character code
-sta $05f4 ;middle of screen memory
+entry: {
+; initialise
+ldx #$00 ;direction 0->3
+
+; store position in screen memory to zero page
+lda #$05 ;high byte
+sta $FD
+lda #$f4 ;low byte
+sta $FE
+
+loop:
+lda #$57  	; circle character code
+sta $05f4 	; middle of screen memory
+
+}
