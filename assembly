@@ -1,0 +1,8 @@
+!include "c64.asm"
++c64::basic_start(entry)
+
+
+entry:
+jsr $e554 ;clear screen
+lda #$57  ;circle character code
+sta $05f4 ;middle of screen memory
