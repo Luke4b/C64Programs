@@ -52,8 +52,8 @@ delay:
     pha
     tya
     pha
-    ldx #$FF
-    ldy #$02
+    ldx #$44
+    ldy #$01
 delay_loop:
     dex
     bne delay_loop
