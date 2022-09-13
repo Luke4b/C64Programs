@@ -156,8 +156,15 @@ spawn:              // spawns a food in a random location
 
 
 check_bounds:
-    // check page (screen ram $0400-$07E7)
-    lda $FD    //load high bit (page)
+    // check left/right of screen
+    lda $FA  // load direction
+    cmp #$01
+    beq !right+
+    cmp #$03
+    beq !left+  // if direction is neither left or right
+                // check bottom/top of screen
+                // check page (screen ram $0400-$07E7)
+    lda $FD     //load high bit (page)
     cmp #$03
     beq out_of_bounds
     cmp #$08
@@ -170,6 +177,10 @@ last_page:
     cmp #$E8
     beq out_of_bounds
     rts
+!right:
+    rts
+!left:
+    rts
 out_of_bounds:
     lda #$01    //set the reset flag
     sta $080E
@@ -181,7 +192,7 @@ delay:
     tya
     pha
     ldx #$FF
-    ldy #$35
+    ldy #$50
 delay_loop:
     dex
     bne delay_loop
