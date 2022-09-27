@@ -9,7 +9,6 @@ BasicUpstart2(main)
 .var tail_pointer_lo = $FE   // tail pointer low byte
 .var tail_pointer_hi = $FF   // tail pointer high byte
 
-
 main:
     lda #$FF  // maximum frequency value
     sta $D40E // voice 3 frequency low byte
@@ -26,15 +25,17 @@ init:
     sta direction
     sta food_flag
     sta reset_flag
-    sta length_lo
     sta length_hi
     sta tail_pointer_lo
+    sta loopcount_lo
+    sta loopcount_hi
 
     lda #$0b
     sta tail_pointer_hi
 
-    //  default value for last key (to match default direction of up/$00)
-    lda #$09
+    lda #$06
+    sta length_lo       // starting length
+    lda #$09            //  default value for last key (to match default direction of up/$00)
     sta last_key
 
     // starting location
@@ -43,18 +44,16 @@ init:
     lda #19             // $13
     sta head_column
 
-    // add initial tail location to the path, on the first step it moves up from this position.
-    jsr screen_address      // look up the screen address
-    ldy #$00
-    lda screen_lo           // load screen location low byte
-    sta (tail_pointer_lo),y // store the low byte of the tail's screen location to the path
-    ldy #$01
-    lda screen_hi           // load screen location high byte
-    sta (tail_pointer_lo),y // store the high byte of the tail's screen location to the path
-
-    jsr clear_screen
+    jsr clear_screen        // clear screen
+    jsr spawn_food          // spawn initial piece of food
 
 loop:
+
+    lda tail_pointer_hi     // print tail pointer, problem occurs with this not looping back correctly.
+    jsr PrintHexValue
+    lda tail_pointer_lo
+    jsr PrintHexValue2    
+
     jsr read_keyb           // read last keypress, ignore if invalid
     jsr step                // set direction, update head coordinate, reset if AOB
     jsr screen_address      // look up the screen address from coordinates
@@ -147,6 +146,7 @@ screen_address:     // finds the screen address for the coordinates in head_row 
     lda #$04
     sta screen_hi
     ldx head_row        // set row coordinate as x for loop counter.
+// .break
     beq add_columns     // if row zero skip straight to column.
 add_rows_loop:          // add rows
     lda #40             // add a row (40 characters)
@@ -179,50 +179,49 @@ collision_check:
 fed:
     lda #$00
     sta food_flag        // set food flag to 00 (no food)
+    inc length_lo
     rts
 
 
 draw:
     // draw head
-    ldy #$00                // load the column into y to be used as offset from row address
+    ldy #$00                
     lda #$41                // character to print
-    sta (screen_lo),y       // draw the head at the row address with the column offset
+    sta (screen_lo),y       // draw the head at the screen address
 
     // add this head location to the path
-    ldy #$02                // index to the next path location
+    lda length_lo
+    asl                       // double it (shift left)
+    tay  
+    //ldy #$02                // index to the next path location
     lda screen_lo           
     sta (tail_pointer_lo),y // store the low byte of the tail's screen location to the path
-    ldy #$03
+    iny
     lda screen_hi
     sta (tail_pointer_lo),y // store the high byte of the tail's screen location to the path
 
-
-    
     // overdraw the tail, returns the tail to a blank space
-    ldy #$00                
+    ldy #$00
     lda (tail_pointer_lo),y // load the tail pointer low byte
     sta screen_lo           // store in the screen location low byte
-    ldy #$01                
+    iny                
     lda (tail_pointer_lo),y // load the tail pointer high byte (next value in the path data)
     sta screen_hi           // store in the screen location high byte
     ldy #$00
     lda #$20               // blank space character
     sta (screen_lo),y       // store in screen location
-
-    // debug screen location
-    lda screen_hi           
-    jsr PrintHexValue
-    lda screen_lo
-    jsr PrintHexValue2
-
-    inc tail_pointer_lo     // increment the tail_pointer twice!
     inc tail_pointer_lo
-    beq tail_pointer_wrap   // if the low byte of the tail pointer has gone to zero, jump to incrementing the high byte
+    inc tail_pointer_lo
+    bne !skip+
+    inc tail_pointer_hi     // if lo byte gone back to zero, increment high byte
+    lda tail_pointer_hi
+    cmp #$13
+    bne !skip+
+    lda #$00
+    sta tail_pointer_hi
     rts
-tail_pointer_wrap:          // increment the high byte 
-    inc tail_pointer_hi     // no check here for if it fits within the bounds of the path data, not needed because the snake can't get that big
+!skip:
     rts
-
 
 
 spawn_food:              // spawns a food in a random location
@@ -240,14 +239,18 @@ rand_row:
     lsr                 //divide by 2 to give random number between 0 - 127
     lsr                 //divide by 2 to give random number between 0 - 63
     lsr                 //divide by 2 to give random number between 0 - 31
-    cmp #25             //compare to see if is in range
+    cmp #4              // lower bound
+    bmi rand_row
+    cmp #21             // upper bound  compare to see if is in range
     bcs rand_row        //if the number is too large, try again
     sta head_row
 rand_col:               //generate a random number between 0-39 for column
     lda $D41B           //get random 8 bit (0 - 255) number from SID
     lsr                 //divide by 2 to give random number between 0 - 127
     lsr                 //divide by 2 to give random number between 0 - 63
-    cmp #40             //compare to see if is in range
+    cmp #04             // lower bound
+    bmi rand_col
+    cmp #36             // upper bound  compare to see if is in range
     bcs rand_col        //if the number is too large, try again
     sta head_column
     jsr screen_address
@@ -273,7 +276,7 @@ delay:
     tya
     pha
     ldx #$FF
-    ldy #$60
+    ldy #$3a
 delay_loop:
     dex
     bne delay_loop
@@ -297,7 +300,8 @@ cls_loop:
     bne cls_loop
     rts
 
-PrintHexValue:  pha
+PrintHexValue:  ldx #$00
+                pha
                 lsr
                 lsr
                 lsr
@@ -314,7 +318,8 @@ PHN_Print:      sta $0400,x
                 inx
                 rts
 
-PrintHexValue2:  pha
+PrintHexValue2: ldx #$00
+                pha
                 lsr
                 lsr
                 lsr
@@ -323,15 +328,13 @@ PrintHexValue2:  pha
                 pla
                 and #$0f
 PrintHexNybble2: cmp #$0a
-                bcs PHN_IsLetter
+                bcs PHN_IsLetter2
 PHN_IsDigit2:    ora #$30
-                bne PHN_Print
+                bne PHN_Print2
 PHN_IsLetter2:   sbc #$09
 PHN_Print2:      sta $0403,x
                 inx
                 rts
-
-
 
 food_flag:        .byte 0   // 1 if there is food currently on the board otherwise 0
 reset_flag:       .byte 0   // 1 if the game should reset
@@ -339,6 +342,8 @@ head_row:         .byte 0   // y-coordinate, zero being top
 head_column:      .byte 0   // x-coordinate, zero being left
 length_lo:        .byte 0   // snake length low byte
 length_hi:        .byte 0   // snake length high byte
+loopcount_lo:     .byte 0
+loopcount_hi:     .byte 0
 
 * = $0b00
 path_hi: .fill 2048, 0
