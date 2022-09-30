@@ -146,7 +146,6 @@ screen_address:     // finds the screen address for the coordinates in head_row 
     lda #$04
     sta screen_hi
     ldx head_row        // set row coordinate as x for loop counter.
-// .break
     beq add_columns     // if row zero skip straight to column.
 add_rows_loop:          // add rows
     lda #40             // add a row (40 characters)
@@ -179,7 +178,14 @@ collision_check:
 fed:
     lda #$00
     sta food_flag        // set food flag to 00 (no food)
-    inc length_lo
+    clc
+
+    lda length_lo   // add 1 to the length 
+    adc #$01
+    sta length_lo
+    lda length_hi
+    adc #$00
+    sta length_hi        
     rts
 
 
@@ -190,37 +196,69 @@ draw:
     sta (screen_lo),y       // draw the head at the screen address
 
     // add this head location to the path
-    lda length_lo
-    asl                       // double it (shift left)
-    tay  
-    //ldy #$02                // index to the next path location
-    lda screen_lo           
-    sta (tail_pointer_lo),y // store the low byte of the tail's screen location to the path
-    iny
+    
+    lda tail_pointer_hi
+    pha
+    lda tail_pointer_lo
+    pha                     // backup the tail pointer address to the stack
+
+    clc
+    lda tail_pointer_hi
+    adc length_hi
+    sta tail_pointer_hi     // the length msb can be 0,1,2 or 3.  Adding this to the tail pointer msb
+                            // allows indexing ahead of the tail > 255 in distance.
+
+    ldy length_lo
+    lda screen_lo
+    sta (tail_pointer_lo),y  // store the screen location lsb to the tail pointer address indexed with length
+
+    lda tail_pointer_lo    
+    clc                     // add 1000 ($03e8) to the effective tail pointer adjusted with length msb
+    adc #$e8                // to address the path msb
+    sta tail_pointer_lo
+    lda tail_pointer_hi
+    adc #$03
+    sta tail_pointer_hi
+
     lda screen_hi
-    sta (tail_pointer_lo),y // store the high byte of the tail's screen location to the path
+    sta (tail_pointer_lo),y  // store the screen location msb to the +1000 tail pointer address
+
+    pla
+    sta tail_pointer_lo
+    pla
+    sta tail_pointer_hi     // pull the tail pointer address back from the stack
+
+
 
     // overdraw the tail, returns the tail to a blank space
     ldy #$00
-    lda (tail_pointer_lo),y // load the tail pointer low byte
-    sta screen_lo           // store in the screen location low byte
-    iny                
-    lda (tail_pointer_lo),y // load the tail pointer high byte (next value in the path data)
-    sta screen_hi           // store in the screen location high byte
-    ldy #$00
+    lda (tail_pointer_lo), y
+    sta screen_lo                 // retrieve the screen location lsb from the path
+
+    lda tail_pointer_hi
+    pha
+    lda tail_pointer_lo
+    pha                     // push the tail pointer address to the stack
+
+    clc                     // add 1000 ($03e8) to the tail pointer to address the path msb
+    adc #$e8
+    sta tail_pointer_lo
+    lda tail_pointer_hi
+    adc #$03
+    sta tail_pointer_hi
+
+    lda (tail_pointer_lo), y
+    sta screen_hi           // store the screen location msb from the +1000 tail pointer address
+
+    pla
+    sta tail_pointer_lo
+    pla
+    sta tail_pointer_hi     // retrieve the tail pointer from the stack
+
     lda #$20               // blank space character
     sta (screen_lo),y       // store in screen location
+
     inc tail_pointer_lo
-    inc tail_pointer_lo
-    bne !skip+
-    inc tail_pointer_hi     // if lo byte gone back to zero, increment high byte
-    lda tail_pointer_hi
-    cmp #$13
-    bne !skip+
-    lda #$00
-    sta tail_pointer_hi
-    rts
-!skip:
     rts
 
 
@@ -346,4 +384,6 @@ loopcount_lo:     .byte 0
 loopcount_hi:     .byte 0
 
 * = $0b00
-path_hi: .fill 2048, 0
+//path_hi: .fill 2000, 0
+path_lo: .fill 1000, 0
+path_hi: .fill 1000, 0
