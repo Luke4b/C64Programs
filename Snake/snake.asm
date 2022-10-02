@@ -33,7 +33,7 @@ init:
     lda #$0b
     sta tail_pointer_hi
 
-    lda #$06
+    lda #$01
     sta length_lo       // starting length
     lda #$09            //  default value for last key (to match default direction of up/$00)
     sta last_key
@@ -202,26 +202,28 @@ draw:
     lda tail_pointer_lo
     pha                     // backup the tail pointer address to the stack
 
+    // add the length msb (which can be a value of 0-3) to the tail pointer msb
+    // this alows indexing ahead by an extra page when length is above 255.
     clc
     lda tail_pointer_hi
     adc length_hi
-    sta tail_pointer_hi     // the length msb can be 0,1,2 or 3.  Adding this to the tail pointer msb
-                            // allows indexing ahead of the tail > 255 in distance.
+    cmp #$0f                      // compare to end of path lsb
+    bcs !wrap+                    // greater than or equal to then we need to wrap back around.
+    sta tail_pointer_hi
+
+    
 
     ldy length_lo
     lda screen_lo
     sta (tail_pointer_lo),y  // store the screen location lsb to the tail pointer address indexed with length
-
-    lda tail_pointer_lo    
-    clc                     // add 1000 ($03e8) to the effective tail pointer adjusted with length msb
-    adc #$e8                // to address the path msb
-    sta tail_pointer_lo
-    lda tail_pointer_hi
-    adc #$03
+ 
+    clc                     // add 1024 ($0400) to the effective tail pointer
+    lda tail_pointer_hi     // adjusted with length msb to address the path msb     
+    adc #$04
     sta tail_pointer_hi
 
     lda screen_hi
-    sta (tail_pointer_lo),y  // store the screen location msb to the +1000 tail pointer address
+    sta (tail_pointer_lo),y  // store the screen location msb to the +1024 tail pointer address
 
     pla
     sta tail_pointer_lo
@@ -240,11 +242,9 @@ draw:
     lda tail_pointer_lo
     pha                     // push the tail pointer address to the stack
 
-    clc                     // add 1000 ($03e8) to the tail pointer to address the path msb
-    adc #$e8
-    sta tail_pointer_lo
+    clc                     // add 1024 ($0400) to the tail pointer to address the path msb
     lda tail_pointer_hi
-    adc #$03
+    adc #$04
     sta tail_pointer_hi
 
     lda (tail_pointer_lo), y
@@ -255,12 +255,16 @@ draw:
     pla
     sta tail_pointer_hi     // retrieve the tail pointer from the stack
 
-    lda #$20               // blank space character
+    lda #$20                // blank space character
     sta (screen_lo),y       // store in screen location
 
     inc tail_pointer_lo
     rts
 
+!wrap:          //if the msb is greater than or equal to $0f
+    sbc #$04    //subtract 4 (so $0f becomes $0b again)    
+    .break
+    rts
 
 spawn_food:              // spawns a food in a random location
     lda food_flag        // load food flag
@@ -385,5 +389,5 @@ loopcount_hi:     .byte 0
 
 * = $0b00
 //path_hi: .fill 2000, 0
-path_lo: .fill 1000, 0
-path_hi: .fill 1000, 0
+path_lo: .fill 1024, 0
+path_hi: .fill 1024, 0
