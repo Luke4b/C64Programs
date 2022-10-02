@@ -24,13 +24,12 @@ init:
     lda #$00
     sta direction
     sta food_flag
-    sta reset_flag
     sta length_hi
     sta tail_pointer_lo
     sta loopcount_lo
     sta loopcount_hi
 
-    lda #$0b
+    lda #$0e
     sta tail_pointer_hi
 
     lda #$01
@@ -48,8 +47,7 @@ init:
     jsr spawn_food          // spawn initial piece of food
 
 loop:
-
-    lda tail_pointer_hi     // print tail pointer, problem occurs with this not looping back correctly.
+    lda tail_pointer_hi
     jsr PrintHexValue
     lda tail_pointer_lo
     jsr PrintHexValue2    
@@ -58,12 +56,6 @@ loop:
     jsr step                // set direction, update head coordinate, reset if AOB
     jsr screen_address      // look up the screen address from coordinates
     jsr collision_check     // check if snake has collided with itself or food
-
-    lda reset_flag      // check if a reset has been triggered and if so re-initiliase the game
-    beq continue
-    jmp init
-
-continue:
     jsr draw                // draw the snake
     jsr spawn_food          // check if there is food, if not spawn one, if food has been eaten increment length
     jsr delay               // run the delay loop to slow the game
@@ -136,11 +128,13 @@ step:
     rts
 
 reset:
-    lda #$01
-    sta reset_flag
-    rts
+    tsx
+    inx
+    inx
+    txs
+    jmp init
 
-screen_address:     // finds the screen address for the coordinates in head_row / head_column
+screen_address:         // finds the screen address for the coordinates in head_row / head_column
     lda #$00            // re-initialise screen address to top left corner
     sta screen_lo
     lda #$04
@@ -200,25 +194,20 @@ draw:
     lda tail_pointer_hi
     pha
     lda tail_pointer_lo
-    pha                     // backup the tail pointer address to the stack
+    pha                         // backup the tail pointer address to the stack so they can be reused for the head.
 
-    // add the length msb (which can be a value of 0-3) to the tail pointer msb
-    // this alows indexing ahead by an extra page when length is above 255.
     clc
-    lda tail_pointer_hi
-    adc length_hi
-    cmp #$0f                      // compare to end of path lsb
-    bcs !wrap+                    // greater than or equal to then we need to wrap back around.
+    lda tail_pointer_hi         // add the length msb (which can be a value of 0-3) to the tail pointer msb
+    adc length_hi               // this alows indexing ahead by an extra page when length is above 255.
     sta tail_pointer_hi
-
+    jsr wrap                    // wrap if needed.
     
-
     ldy length_lo
     lda screen_lo
     sta (tail_pointer_lo),y  // store the screen location lsb to the tail pointer address indexed with length
  
-    clc                     // add 1024 ($0400) to the effective tail pointer
-    lda tail_pointer_hi     // adjusted with length msb to address the path msb     
+    clc                     // add 1024 ($0400) to address the path msb
+    lda tail_pointer_hi
     adc #$04
     sta tail_pointer_hi
 
@@ -231,16 +220,13 @@ draw:
     sta tail_pointer_hi     // pull the tail pointer address back from the stack
 
 
-
     // overdraw the tail, returns the tail to a blank space
     ldy #$00
     lda (tail_pointer_lo), y
     sta screen_lo                 // retrieve the screen location lsb from the path
 
     lda tail_pointer_hi
-    pha
-    lda tail_pointer_lo
-    pha                     // push the tail pointer address to the stack
+    pha                      // push the tail pointer address to the stack
 
     clc                     // add 1024 ($0400) to the tail pointer to address the path msb
     lda tail_pointer_hi
@@ -251,19 +237,28 @@ draw:
     sta screen_hi           // store the screen location msb from the +1000 tail pointer address
 
     pla
-    sta tail_pointer_lo
-    pla
     sta tail_pointer_hi     // retrieve the tail pointer from the stack
 
     lda #$20                // blank space character
     sta (screen_lo),y       // store in screen location
 
-    inc tail_pointer_lo
+    clc
+    lda tail_pointer_lo
+    adc #$01
+    sta tail_pointer_lo
+    lda tail_pointer_hi
+    adc #$00
+    sta tail_pointer_hi
+    jsr wrap
     rts
 
-!wrap:          //if the msb is greater than or equal to $0f
-    sbc #$04    //subtract 4 (so $0f becomes $0b again)    
-    .break
+wrap:                       //if the msb is greater than or equal to $0f
+    lda tail_pointer_hi
+    cmp #$0F
+    bcs !+              
+    rts
+ !: sbc #$04                //subtract 4 (so for example $0f becomes $0b again)
+    sta tail_pointer_hi
     rts
 
 spawn_food:              // spawns a food in a random location
@@ -379,7 +374,6 @@ PHN_Print2:      sta $0403,x
                 rts
 
 food_flag:        .byte 0   // 1 if there is food currently on the board otherwise 0
-reset_flag:       .byte 0   // 1 if the game should reset
 head_row:         .byte 0   // y-coordinate, zero being top
 head_column:      .byte 0   // x-coordinate, zero being left
 length_lo:        .byte 0   // snake length low byte
@@ -388,6 +382,5 @@ loopcount_lo:     .byte 0
 loopcount_hi:     .byte 0
 
 * = $0b00
-//path_hi: .fill 2000, 0
 path_lo: .fill 1024, 0
 path_hi: .fill 1024, 0
