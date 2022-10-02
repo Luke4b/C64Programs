@@ -2,12 +2,14 @@ BasicUpstart2(main)
 
 * = $0810
 
-.var direction = $FA         // 0 = up then clockwise to 3
-.var last_key = $FB          // last key pressed
+//.var unused = $FA           // unused zero page location
+.var last_key = $FB           // last key pressed
 .var screen_lsb = $FC         // screen address low byte
 .var screen_msb = $FD         // screen address high byte
 .var head_pointer_lsb = $FE   // tail pointer low byte
 .var head_pointer_msb = $FF   // tail pointer high byte
+
+.var food_char = $41    // character to be used for food.
 
 main:
     lda #$FF  // maximum frequency value
@@ -34,6 +36,7 @@ init:
 
     lda #$01
     sta length_lsb       // starting length
+
     lda #$09            //  default value for last key (to match default direction of up/$00)
     sta last_key
 
@@ -47,9 +50,9 @@ init:
     jsr spawn_food          // spawn initial piece of food
 
 loop:
-    lda head_pointer_msb
+    lda length_msb
     jsr PrintHexValue
-    lda head_pointer_lsb
+    lda length_lsb
     jsr PrintHexValue2    
 
     jsr read_keyb           // read last keypress, ignore if invalid
@@ -65,7 +68,7 @@ read_keyb:          // reads keyboard input
     ldx $c5         // read keyboard buffer
     lda direction   
     and #$00000001  // if direction is $01 or $03 then it's horizontal, AND gives 1 otherwise vertical, AND gives 0
-    bne horiz
+    bne !horiz+
     // not horizontal so direction must be vertical
     txa
     cmp #$12
@@ -73,7 +76,7 @@ read_keyb:          // reads keyboard input
     cmp #$0A
     beq update_key
     rts
-horiz:
+!horiz:
     txa
     cmp #$09
     beq update_key
@@ -86,6 +89,8 @@ update_key:
 
 
 step:
+    lda direction 
+    sta prev_dir     // store the direction from the previous loop
     lda last_key
     cmp #$09  // 'w' = up
     beq !up+
@@ -163,8 +168,8 @@ add_columns:
 
 collision_check:
     ldy #$00
-    lda (screen_lsb),y    // load head position in screen ram
-    cmp #$06             // check if that has food, character 'F'
+    lda (screen_lsb),y         // load head position in screen ram
+    cmp #food_char              // check if that has food character
     beq fed
     cmp #$20
     bne reset
@@ -185,8 +190,8 @@ fed:
 
 draw:
     // draw head
-    ldy #$00                
-    lda #$41                // character to print
+    ldy #$00                    
+    jsr which_char
     sta (screen_lsb),y       // draw the head at the screen address
 
     // add head screen location to path
@@ -286,11 +291,11 @@ rand_col:               //generate a random number between 0-39 for column
     sta head_column
     jsr screen_address
     ldy #$00           
-    lda (screen_lsb),y   // load screen position
+    lda (screen_lsb),y  // load screen position
     cmp #$20            // see if it's a suitably blank location
     bne rand_row        // if it's not blank try again!!
-    lda #$06            // character 'F'
-    sta (screen_lsb),y   // spawn food
+    lda #food_char       // food character
+    sta (screen_lsb),y  // spawn food
     lda #$01
     sta food_flag       // set the food flag to 01 (there is food)
     pla
@@ -300,6 +305,15 @@ rand_col:               //generate a random number between 0-39 for column
 !skip:
     rts
   
+which_char:             // works out which character needs to be drawn, puts it in the a register.
+    lda direction
+    and #$00000001
+    bne !horiz+
+    lda #$5d
+    rts
+!horiz:
+    lda #$43
+    rts
 
 delay:
     txa
@@ -367,13 +381,15 @@ PHN_Print2:      sta $0403,x
                 inx
                 rts
 
-food_flag:        .byte 0   // 1 if there is food currently on the board otherwise 0
-head_row:         .byte 0   // y-coordinate, zero being top
-head_column:      .byte 0   // x-coordinate, zero being left
-length_lsb:        .byte 0   // snake length low byte
-length_msb:        .byte 0   // snake length high byte
-loopcount_lo:     .byte 0
-loopcount_hi:     .byte 0
+food_flag:          .byte 0   // 1 if there is food currently on the board otherwise 0
+direction:          .byte 0
+prev_dir:           .byte 0
+head_row:           .byte 0   // y-coordinate, zero being top
+head_column:        .byte 0   // x-coordinate, zero being left
+length_lsb:         .byte 0   // snake length low byte
+length_msb:         .byte 0   // snake length high byte
+loopcount_lo:       .byte 0
+loopcount_hi:       .byte 0
 
 * = $0b00
 path_lo: .fill 1024, 0
