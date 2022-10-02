@@ -4,10 +4,10 @@ BasicUpstart2(main)
 
 .var direction = $FA         // 0 = up then clockwise to 3
 .var last_key = $FB          // last key pressed
-.var screen_lo = $FC         // screen address low byte
-.var screen_hi = $FD         // screen address high byte
-.var tail_pointer_lo = $FE   // tail pointer low byte
-.var tail_pointer_hi = $FF   // tail pointer high byte
+.var screen_lsb = $FC         // screen address low byte
+.var screen_msb = $FD         // screen address high byte
+.var head_pointer_lsb = $FE   // tail pointer low byte
+.var head_pointer_msb = $FF   // tail pointer high byte
 
 main:
     lda #$FF  // maximum frequency value
@@ -24,16 +24,16 @@ init:
     lda #$00
     sta direction
     sta food_flag
-    sta length_hi
-    sta tail_pointer_lo
+    sta length_msb
+    sta head_pointer_lsb
     sta loopcount_lo
     sta loopcount_hi
 
-    lda #$0e
-    sta tail_pointer_hi
+    lda #$0b
+    sta head_pointer_msb
 
     lda #$01
-    sta length_lo       // starting length
+    sta length_lsb       // starting length
     lda #$09            //  default value for last key (to match default direction of up/$00)
     sta last_key
 
@@ -47,9 +47,9 @@ init:
     jsr spawn_food          // spawn initial piece of food
 
 loop:
-    lda tail_pointer_hi
+    lda head_pointer_msb
     jsr PrintHexValue
-    lda tail_pointer_lo
+    lda head_pointer_lsb
     jsr PrintHexValue2    
 
     jsr read_keyb           // read last keypress, ignore if invalid
@@ -136,34 +136,34 @@ reset:
 
 screen_address:         // finds the screen address for the coordinates in head_row / head_column
     lda #$00            // re-initialise screen address to top left corner
-    sta screen_lo
+    sta screen_lsb
     lda #$04
-    sta screen_hi
+    sta screen_msb
     ldx head_row        // set row coordinate as x for loop counter.
     beq add_columns     // if row zero skip straight to column.
 add_rows_loop:          // add rows
     lda #40             // add a row (40 characters)
     clc
-    adc screen_lo      
-    sta screen_lo
+    adc screen_lsb      
+    sta screen_lsb
     lda #$00            // load zero (carry should still be set)
-    adc screen_hi       // add the carry if it exists
-    sta screen_hi
+    adc screen_msb       // add the carry if it exists
+    sta screen_msb
     dex
     bne add_rows_loop
 add_columns:
     lda head_column
     clc
-    adc screen_lo
-    sta screen_lo
+    adc screen_lsb
+    sta screen_lsb
     lda #$00            // load zero (carry should still be set)
-    adc screen_hi
-    sta screen_hi
+    adc screen_msb
+    sta screen_msb
     rts
 
 collision_check:
     ldy #$00
-    lda (screen_lo),y    // load head position in screen ram
+    lda (screen_lsb),y    // load head position in screen ram
     cmp #$06             // check if that has food, character 'F'
     beq fed
     cmp #$20
@@ -174,12 +174,12 @@ fed:
     sta food_flag        // set food flag to 00 (no food)
     clc
 
-    lda length_lo   // add 1 to the length 
+    lda length_lsb   // add 1 to the length 
     adc #$01
-    sta length_lo
-    lda length_hi
+    sta length_lsb
+    lda length_msb
     adc #$00
-    sta length_hi        
+    sta length_msb        
     rts
 
 
@@ -187,79 +187,73 @@ draw:
     // draw head
     ldy #$00                
     lda #$41                // character to print
-    sta (screen_lo),y       // draw the head at the screen address
+    sta (screen_lsb),y       // draw the head at the screen address
 
-    // add this head location to the path
-    
-    lda tail_pointer_hi
+    // add head screen location to path
+    lda screen_lsb
+    sta (head_pointer_lsb), y
+
+    lda head_pointer_msb
+    pha                         // temporarily push the head pointer to the stack
+    clc
+    adc #$04                    // add 1024 ($0400) to point at the path msb
+    sta head_pointer_msb
+    lda screen_msb
+    sta (head_pointer_lsb),y
+    pla                         // retrieve head pointer from the stack
+    sta head_pointer_msb
+
+    // overwrite the tail
+    lda head_pointer_msb        // temporarily push the head pointers to the stack so
+    pha                         // so they can instead be used to hold the pointer to the tail
+    lda head_pointer_lsb
     pha
-    lda tail_pointer_lo
-    pha                         // backup the tail pointer address to the stack so they can be reused for the head.
 
+    sec                         // subtract the snake's length to get to the tail.
+    sbc length_lsb
+    sta head_pointer_lsb
+    lda head_pointer_msb
+    sbc length_msb
+    sta head_pointer_msb
+    cmp #$0b                    // check if this falls out the bottom of the path space
+    bcs !+                      // and if so wrap around.
+    adc #$04
+    sta head_pointer_msb
+!: 
+
+    ldy #$00                    // retrieve the screen location from the path and write 
+    lda (head_pointer_lsb), y   // a blank space character to that location.
+    sta screen_lsb
     clc
-    lda tail_pointer_hi         // add the length msb (which can be a value of 0-3) to the tail pointer msb
-    adc length_hi               // this alows indexing ahead by an extra page when length is above 255.
-    sta tail_pointer_hi
-    jsr wrap                    // wrap if needed.
+    lda head_pointer_msb
+    adc #$04
+    sta head_pointer_msb
+    lda (head_pointer_lsb), y
+    sta screen_msb
+    lda #$20
+    sta (screen_lsb), y
     
-    ldy length_lo
-    lda screen_lo
-    sta (tail_pointer_lo),y  // store the screen location lsb to the tail pointer address indexed with length
- 
-    clc                     // add 1024 ($0400) to address the path msb
-    lda tail_pointer_hi
-    adc #$04
-    sta tail_pointer_hi
-
-    lda screen_hi
-    sta (tail_pointer_lo),y  // store the screen location msb to the +1024 tail pointer address
-
+    pla                         // retrieve the head points from the stack
+    sta head_pointer_lsb
     pla
-    sta tail_pointer_lo
-    pla
-    sta tail_pointer_hi     // pull the tail pointer address back from the stack
+    sta head_pointer_msb
 
 
-    // overdraw the tail, returns the tail to a blank space
-    ldy #$00
-    lda (tail_pointer_lo), y
-    sta screen_lo                 // retrieve the screen location lsb from the path
-
-    lda tail_pointer_hi
-    pha                      // push the tail pointer address to the stack
-
-    clc                     // add 1024 ($0400) to the tail pointer to address the path msb
-    lda tail_pointer_hi
-    adc #$04
-    sta tail_pointer_hi
-
-    lda (tail_pointer_lo), y
-    sta screen_hi           // store the screen location msb from the +1000 tail pointer address
-
-    pla
-    sta tail_pointer_hi     // retrieve the tail pointer from the stack
-
-    lda #$20                // blank space character
-    sta (screen_lo),y       // store in screen location
-
+    // increment head_pointer
     clc
-    lda tail_pointer_lo
+    lda head_pointer_lsb
     adc #$01
-    sta tail_pointer_lo
-    lda tail_pointer_hi
+    sta head_pointer_lsb
+    lda head_pointer_msb
     adc #$00
-    sta tail_pointer_hi
-    jsr wrap
+    sta head_pointer_msb
+    cmp #$0f                    // check if the path pointer should be wrapped back around.
+    beq !+
+    rts
+!:  lda #$0b
+    sta head_pointer_msb
     rts
 
-wrap:                       //if the msb is greater than or equal to $0f
-    lda tail_pointer_hi
-    cmp #$0F
-    bcs !+              
-    rts
- !: sbc #$04                //subtract 4 (so for example $0f becomes $0b again)
-    sta tail_pointer_hi
-    rts
 
 spawn_food:              // spawns a food in a random location
     lda food_flag        // load food flag
@@ -292,11 +286,11 @@ rand_col:               //generate a random number between 0-39 for column
     sta head_column
     jsr screen_address
     ldy #$00           
-    lda (screen_lo),y   // load screen position
+    lda (screen_lsb),y   // load screen position
     cmp #$20            // see if it's a suitably blank location
     bne rand_row        // if it's not blank try again!!
     lda #$06            // character 'F'
-    sta (screen_lo),y   // spawn food
+    sta (screen_lsb),y   // spawn food
     lda #$01
     sta food_flag       // set the food flag to 01 (there is food)
     pla
@@ -376,8 +370,8 @@ PHN_Print2:      sta $0403,x
 food_flag:        .byte 0   // 1 if there is food currently on the board otherwise 0
 head_row:         .byte 0   // y-coordinate, zero being top
 head_column:      .byte 0   // x-coordinate, zero being left
-length_lo:        .byte 0   // snake length low byte
-length_hi:        .byte 0   // snake length high byte
+length_lsb:        .byte 0   // snake length low byte
+length_msb:        .byte 0   // snake length high byte
 loopcount_lo:     .byte 0
 loopcount_hi:     .byte 0
 
