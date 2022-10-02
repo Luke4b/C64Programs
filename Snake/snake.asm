@@ -190,8 +190,14 @@ fed:
 
 draw:
     // draw head
-    ldy #$00                    
-    jsr which_char
+    lda direction
+    and #$01
+    bne !horiz+
+    lda #$5d                // load character for vertical line
+    jmp !+
+!horiz:
+    lda #$43                // load character for horizontal line
+!:  ldy #$00                    
     sta (screen_lsb),y       // draw the head at the screen address
 
     // add head screen location to path
@@ -208,13 +214,51 @@ draw:
     pla                         // retrieve head pointer from the stack
     sta head_pointer_msb
 
-    // overwrite the tail
+    // add corner behind head if needed
+    lda direction
+    cmp prev_dir                // check if the snake has made a change of direction (corner needed)
+    bne corner
+    jmp tail
+corner:
     lda head_pointer_msb        // temporarily push the head pointers to the stack so
     pha                         // so they can instead be used to hold the pointer to the tail
     lda head_pointer_lsb
     pha
 
-    sec                         // subtract the snake's length to get to the tail.
+    sec
+    lda head_pointer_lsb
+    sbc #$01
+    sta head_pointer_lsb
+    lda head_pointer_msb
+    sbc #$00
+    sta head_pointer_msb
+
+    ldy #$00
+    lda (head_pointer_lsb), y
+    sta screen_lsb
+    clc
+    lda head_pointer_msb
+    adc #$04
+    sta head_pointer_msb
+    lda (head_pointer_lsb), y
+    sta screen_msb
+    jsr which_corner            // puts correct character in 'a' reg
+    sta (screen_lsb), y
+    inc head_pointer_lsb
+    
+    pla                         // retrieve the head pointers from the stack
+    sta head_pointer_lsb
+    pla
+    sta head_pointer_msb
+
+    // overwrite the tail
+ tail:
+    lda head_pointer_msb        // temporarily push the head pointers to the stack so
+    pha                         // so they can instead be used to hold the pointer to the tail
+    lda head_pointer_lsb
+    pha
+
+ !: sec                         // subtract the snake's length to get to the tail.
     sbc length_lsb
     sta head_pointer_lsb
     lda head_pointer_msb
@@ -238,7 +282,7 @@ draw:
     lda #$20
     sta (screen_lsb), y
     
-    pla                         // retrieve the head points from the stack
+    pla                         // retrieve the head pointers from the stack
     sta head_pointer_lsb
     pla
     sta head_pointer_msb
@@ -305,14 +349,44 @@ rand_col:               //generate a random number between 0-39 for column
 !skip:
     rts
   
-which_char:             // works out which character needs to be drawn, puts it in the a register.
+which_corner:             // works out which character needs to be drawn, puts it in the 'a' register.
     lda direction
-    and #$00000001
-    bne !horiz+
-    lda #$5d
+    cmp #$00
+    beq !up+
+    cmp #$01
+    beq !right+
+    cmp #$02
+    beq !down+
+    lda prev_dir
+    cmp #$00
+    bne !+
+    lda #$49
     rts
-!horiz:
-    lda #$43
+!:  lda #$4b
+    rts
+!up:
+    lda prev_dir
+    cmp #$01
+    bne !+
+    lda #$4b
+    rts
+!:  lda #$4a
+    rts
+!right:
+    lda prev_dir
+    cmp #$00
+    bne !+
+    lda #$55
+    rts
+!:  lda #$4a
+    rts
+!down:
+    lda prev_dir
+    cmp #$01
+    bne !+
+    lda #$49
+    rts
+!:  lda #$55
     rts
 
 delay:
