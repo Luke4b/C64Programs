@@ -6,10 +6,10 @@ BasicUpstart2(main)
 .var last_key = $FB           // last key pressed
 .var screen_lsb = $FC         // screen address low byte
 .var screen_msb = $FD         // screen address high byte
-.var head_pointer_lsb = $FE   // tail pointer low byte
-.var head_pointer_msb = $FF   // tail pointer high byte
+.var head_pointer_lsb = $FE   // head pointer low byte
+.var head_pointer_msb = $FF   // head pointer high byte
 
-.var food_char = $41    // character to be used for food.
+.var food_char = $07    // character to be used for food.
 
 main:
     lda #$FF  // maximum frequency value
@@ -17,6 +17,10 @@ main:
     sta $D40F // voice 3 frequency high byte
     lda #$80  // noise waveform, gate bit off
     sta $D412 // voice 3 control register
+
+    lda $D018 // set character memory to start from ram at $3000
+    ora #$0c
+    sta $d018
 
     jsr init
     jsr loop
@@ -28,19 +32,20 @@ init:
     sta food_flag
     sta length_msb
     sta head_pointer_lsb
-    sta loopcount_lo
-    sta loopcount_hi
 
-    lda #$0b
+    lda #$0c
     sta head_pointer_msb
 
-    lda #$01
+    lda #$0e
+    sta snake_colour
+
+    lda #$02
     sta length_lsb       // starting length
 
     lda #$09            //  default value for last key (to match default direction of up/$00)
     sta last_key
 
-    // starting location
+    // starting location in approximately screen centre
     lda #12             // $0C
     sta head_row
     lda #19             // $13
@@ -50,11 +55,6 @@ init:
     jsr spawn_food          // spawn initial piece of food
 
 loop:
-    lda length_msb
-    jsr PrintHexValue
-    lda length_lsb
-    jsr PrintHexValue2    
-
     jsr read_keyb           // read last keypress, ignore if invalid
     jsr step                // set direction, update head coordinate, reset if AOB
     jsr screen_address      // look up the screen address from coordinates
@@ -171,122 +171,107 @@ collision_check:
     lda (screen_lsb),y         // load head position in screen ram
     cmp #food_char              // check if that has food character
     beq fed
-    cmp #$20
+    cmp #$00
     bne reset
     rts
 fed:
     lda #$00
     sta food_flag        // set food flag to 00 (no food)
     clc
-
     lda length_lsb   // add 1 to the length 
     adc #$01
     sta length_lsb
     lda length_msb
     adc #$00
-    sta length_msb        
+    sta length_msb
+    lda food_colour
+    sta snake_colour
     rts
-
 
 draw:
     // draw head
-    lda direction
-    and #$01
-    bne !horiz+
-    lda #$5d                // load character for vertical line
-    jmp !+
-!horiz:
-    lda #$43                // load character for horizontal line
-!:  ldy #$00                    
-    sta (screen_lsb),y       // draw the head at the screen address
+    lda #$0c
+    clc
+    adc direction
+    ldy #$00
+    sta (screen_lsb),y
 
-    // add head screen location to path
+    lda screen_msb
+    pha
+    adc #$d4                    // move msb up to address colour ram
+    sta screen_msb
+    lda snake_colour
+    sta (screen_lsb),y
+    pla
+    sta screen_msb
+
+    // add this new head screen location and direction to the path
     lda screen_lsb
     sta (head_pointer_lsb), y
 
     lda head_pointer_msb
     pha                         // temporarily push the head pointer to the stack
+
     clc
     adc #$04                    // add 1024 ($0400) to point at the path msb
     sta head_pointer_msb
     lda screen_msb
     sta (head_pointer_lsb),y
+
+    lda head_pointer_msb
+    clc
+    adc #$04                    // add another 1024 ($0400) to point at the path direction
+    sta head_pointer_msb
+    lda direction
+    sta (head_pointer_lsb),y
+    
     pla                         // retrieve head pointer from the stack
     sta head_pointer_msb
 
-    // add corner behind head if needed
-    lda direction
-    cmp prev_dir                // check if the snake has made a change of direction (corner needed)
-    bne corner
-    jmp tail
-corner:
-    lda head_pointer_msb        // temporarily push the head pointers to the stack so
-    pha                         // so they can instead be used to hold the pointer to the tail
-    lda head_pointer_lsb
-    pha
+    // redraw body behind head
+    lda #$01                    // load the path_offset with a vlue one 1 for the space behind the head.
+    sta path_offset + 0
+    lda #$00
+    sta path_offset + 1
 
-    sec
-    lda head_pointer_lsb
-    sbc #$01
-    sta head_pointer_lsb
-    lda head_pointer_msb
-    sbc #$00
-    sta head_pointer_msb
-
+    jsr path_lookup                // look up the screen location behind the head from the path
+    jsr body_char                  // look up what character to draw based on the previous direction, puts in 'a' reg
     ldy #$00
-    lda (head_pointer_lsb), y
-    sta screen_lsb
+    sta (screen_lsb),y
+
+    // draw the tail
+    sec
+    lda length_lsb                 // subtract 1 from the length to find the tail space 
+    sbc #$01
+    sta path_offset + 0
+    lda length_msb
+    sbc #$00
+    sta path_offset + 1
+
+    jsr path_lookup
+    lda #$08
     clc
-    lda head_pointer_msb
-    adc #$04
-    sta head_pointer_msb
-    lda (head_pointer_lsb), y
-    sta screen_msb
-    jsr which_corner            // puts correct character in 'a' reg
-    sta (screen_lsb), y
-    inc head_pointer_lsb
-    
-    pla                         // retrieve the head pointers from the stack
-    sta head_pointer_lsb
-    pla
-    sta head_pointer_msb
+    adc tail_direction
+    ldy #$00
+    sta (screen_lsb),y    
 
-    // overwrite the tail
- tail:
-    lda head_pointer_msb        // temporarily push the head pointers to the stack so
-    pha                         // so they can instead be used to hold the pointer to the tail
-    lda head_pointer_lsb
-    pha
+    // remove the old tail (overwrite with a blank space)
+    lda length_lsb
+    sta path_offset + 0
+    lda length_msb
+    sta path_offset + 1
 
- !: sec                         // subtract the snake's length to get to the tail.
-    sbc length_lsb
-    sta head_pointer_lsb
-    lda head_pointer_msb
-    sbc length_msb
-    sta head_pointer_msb
-    cmp #$0b                    // check if this falls out the bottom of the path space
-    bcs !+                      // and if so wrap around.
-    adc #$04
-    sta head_pointer_msb
-!: 
+    jsr path_lookup
+    ldy #$00
+    lda #$00
+    sta (screen_lsb),y
 
-    ldy #$00                    // retrieve the screen location from the path and write 
-    lda (head_pointer_lsb), y   // a blank space character to that location.
-    sta screen_lsb
-    clc
-    lda head_pointer_msb
-    adc #$04
-    sta head_pointer_msb
-    lda (head_pointer_lsb), y
-    sta screen_msb
-    lda #$20
-    sta (screen_lsb), y
-    
-    pla                         // retrieve the head pointers from the stack
-    sta head_pointer_lsb
-    pla
-    sta head_pointer_msb
-
+    // lda screen_msb
+    // clc
+    // adc #$d4
+    // sta screen_msb
+    // lda #$06            // blue colour
+    // sta (screen_lsb),y
 
     // increment head_pointer
     clc
@@ -296,13 +281,57 @@ corner:
     lda head_pointer_msb
     adc #$00
     sta head_pointer_msb
-    cmp #$0f                    // check if the path pointer should be wrapped back around.
+    cmp #$10                    // check if the path pointer should be wrapped back around.
     beq !+
     rts
-!:  lda #$0b
+!:  lda #$0c
     sta head_pointer_msb
     rts
 
+    // looks up the screen location from the path_offset and places
+    // it in the screen_msb / lsb locations
+    // takes care of wrapping around when decrementing the head_pointer
+    // to stay within the valid memory space.
+    // restores the head_pointer afterwards.
+path_lookup:
+    lda head_pointer_msb        // backup head pointer to stack
+    pha
+    lda head_pointer_lsb
+    pha
+
+    sec                         // subtract the path_offset
+    sbc path_offset + 0
+    sta head_pointer_lsb
+    lda head_pointer_msb
+    sbc path_offset + 1
+    sta head_pointer_msb
+    cmp #$0c                    // check if this falls out the bottom of the path space
+    bcs !+                      // and if so wrap around.
+    adc #$04
+    sta head_pointer_msb
+
+!:  ldy #$00                    // retrieve the screen location from the path
+    lda (head_pointer_lsb), y
+    sta screen_lsb
+    clc
+    lda head_pointer_msb
+    adc #$04
+    sta head_pointer_msb
+    lda (head_pointer_lsb), y
+    sta screen_msb
+    clc
+    ldy #$01
+    lda head_pointer_msb
+    adc #$04
+    sta head_pointer_msb
+    lda (head_pointer_lsb), y
+    sta tail_direction
+        
+    pla
+    sta head_pointer_lsb        // restore head pointer from stack
+    pla
+    sta head_pointer_msb
+    rts
 
 spawn_food:              // spawns a food in a random location
     lda food_flag        // load food flag
@@ -319,26 +348,42 @@ rand_row:
     lsr                 //divide by 2 to give random number between 0 - 127
     lsr                 //divide by 2 to give random number between 0 - 63
     lsr                 //divide by 2 to give random number between 0 - 31
-    cmp #4              // lower bound
+    cmp #3              // lower bound
     bmi rand_row
-    cmp #21             // upper bound  compare to see if is in range
+    cmp #24             // upper bound  compare to see if is in range
     bcs rand_row        //if the number is too large, try again
     sta head_row
 rand_col:               //generate a random number between 0-39 for column
     lda $D41B           //get random 8 bit (0 - 255) number from SID
     lsr                 //divide by 2 to give random number between 0 - 127
     lsr                 //divide by 2 to give random number between 0 - 63
-    cmp #04             // lower bound
+    cmp #03             // lower bound
     bmi rand_col
-    cmp #36             // upper bound  compare to see if is in range
+    cmp #37             // upper bound  compare to see if is in range
     bcs rand_col        //if the number is too large, try again
     sta head_column
     jsr screen_address
     ldy #$00           
     lda (screen_lsb),y  // load screen position
-    cmp #$20            // see if it's a suitably blank location
+    cmp #$00            // see if it's a suitably blank location
     bne rand_row        // if it's not blank try again!!
-    lda #food_char       // food character
+
+!:  lda $D41B
+    and #%00001111
+    cmp #$06            // check it's not the background colour (blue)
+    beq !-              // if it is, try again
+    sta food_colour
+    lda screen_msb      // backup msb to stack
+    pha
+    clc
+    adc #$d4            // to address color ram
+    sta screen_msb
+    lda food_colour
+    sta (screen_lsb),y
+    pla
+    sta screen_msb      // restore msb
+
+    lda #food_char      // food character
     sta (screen_lsb),y  // spawn food
     lda #$01
     sta food_flag       // set the food flag to 01 (there is food)
@@ -349,9 +394,18 @@ rand_col:               //generate a random number between 0-39 for column
 !skip:
     rts
   
-which_corner:             // works out which character needs to be drawn, puts it in the 'a' register.
+body_char:             // works out which corner character needs to be drawn, puts it in the 'a' register.
     lda direction
-    cmp #$00
+    cmp prev_dir
+    bne !corner+             // if the previous direction was different proceed to corner logic
+    and #%00000001
+    bne !horiz+
+    lda #$01
+    rts
+!horiz:
+    lda #$02
+    rts
+!corner:  cmp #$00
     beq !up+
     cmp #$01
     beq !right+
@@ -360,33 +414,33 @@ which_corner:             // works out which character needs to be drawn, puts i
     lda prev_dir
     cmp #$00
     bne !+
-    lda #$49
+    lda #$03            // ne_corner character
     rts
-!:  lda #$4b
+!:  lda #$05            // se_corner character
     rts
 !up:
     lda prev_dir
     cmp #$01
     bne !+
-    lda #$4b
+    lda #$05            // se_corner character
     rts
-!:  lda #$4a
+!:  lda #$06            // sw_corner character
     rts
 !right:
     lda prev_dir
     cmp #$00
-    bne !+
-    lda #$55
+    bne !+  
+    lda #$04            // nw_corner character
     rts
-!:  lda #$4a
+!:  lda #$06            // sw_corner character
     rts
 !down:
     lda prev_dir
     cmp #$01
     bne !+
-    lda #$49
+    lda #$03            // ne_corner character
     rts
-!:  lda #$55
+!:  lda #$04            // nw_corner character
     rts
 
 delay:
@@ -409,7 +463,7 @@ delay_loop:
 
 clear_screen:   // fill screen with space characters $0400 - $07FF
     ldx #$00
-    lda #$20    // space character
+    lda #$00    // space character
 cls_loop:
     sta $0400,x
     sta $0500,x
@@ -419,52 +473,37 @@ cls_loop:
     bne cls_loop
     rts
 
-PrintHexValue:  ldx #$00
-                pha
-                lsr
-                lsr
-                lsr
-                lsr
-                jsr PrintHexNybble
-                pla
-                and #$0f
-PrintHexNybble: cmp #$0a
-                bcs PHN_IsLetter
-PHN_IsDigit:    ora #$30
-                bne PHN_Print
-PHN_IsLetter:   sbc #$09
-PHN_Print:      sta $0400,x
-                inx
-                rts
-
-PrintHexValue2: ldx #$00
-                pha
-                lsr
-                lsr
-                lsr
-                lsr
-                jsr PrintHexNybble2
-                pla
-                and #$0f
-PrintHexNybble2: cmp #$0a
-                bcs PHN_IsLetter2
-PHN_IsDigit2:    ora #$30
-                bne PHN_Print2
-PHN_IsLetter2:   sbc #$09
-PHN_Print2:      sta $0403,x
-                inx
-                rts
-
-food_flag:          .byte 0   // 1 if there is food currently on the board otherwise 0
+food_flag:          .byte 0      // 1 if there is food currently on the board otherwise 0
 direction:          .byte 0
 prev_dir:           .byte 0
-head_row:           .byte 0   // y-coordinate, zero being top
-head_column:        .byte 0   // x-coordinate, zero being left
-length_lsb:         .byte 0   // snake length low byte
-length_msb:         .byte 0   // snake length high byte
-loopcount_lo:       .byte 0
-loopcount_hi:       .byte 0
+head_row:           .byte 0      // y-coordinate, zero being top
+head_column:        .byte 0      // x-coordinate, zero being left
+length_lsb:         .byte 0      // snake length low byte
+length_msb:         .byte 0      // snake length high byte
+path_offset:        .word $0000  // 16 bit offset to be applied when looking up screen locations from the path.
+tail_direction:     .byte 0
+snake_colour:       .byte 0
+food_colour:        .byte 0
 
-* = $0b00
-path_lo: .fill 1024, 0
-path_hi: .fill 1024, 0
+* = $0c00
+path_lo:  .fill 1024, 0
+path_hi:  .fill 1024, 0
+path_dir: .fill 1024, 0
+
+*=$3000
+blank_spc: .fill 8, $00                                 //$3000     char $00
+verti_bod: .fill 8, $7e                                 //$3008     char $01
+horiz_bod: .byte $00, $ff, $ff, $ff, $ff, $ff, $ff, $00 //$3010     char $02
+ne_corner: .byte $00, $f0, $f8, $fc, $fe, $fe, $fe, $7e //$3018     char $03
+nw_corner: .byte $00, $0f, $1f, $3f, $7f, $7f, $7f, $7e //$3020     char $04
+se_corner: .byte $7e, $fe, $fe, $fe, $fc, $f8, $f0, $00 //$3028     char $05
+sw_corner: .byte $7e, $7f, $7f, $7f, $3f, $1f, $0f, $00 //$3030     char $06
+food:      .byte $00, $3c, $42, $42, $42, $42, $3c, $00 //$3038     char $07
+tail_up:   .byte $7e, $7e, $3c, $3c, $3c, $18, $18, $18 //$3040     char $08
+tail_rght: .byte $00, $02, $1f, $ff, $ff, $1f, $02, $00 //$3048     char $09
+tail_down: .byte $18, $18, $18, $3c, $3c, $3c, $7e, $7e //$3050     char $0a
+tail_left: .byte $00, $c0, $f8, $ff, $ff, $f8, $c0, $00 //$3058     char $0b
+head_up:   .byte $18, $3c, $7e, $bd, $bd, $ff, $ff, $7e //$3060     char $0c
+head_rght: .byte $78, $e4, $fe, $ff, $ff, $fe, $e4, $78 //$3068     char $0d
+head_down: .byte $7e, $ef, $ef, $bd, $bd, $7e, $3c, $18 //$3070     char $0e
+head_left: .byte $1e, $27, $7f, $ff, $ff, $7f, $27, $1e //$3078     char $0f
