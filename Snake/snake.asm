@@ -9,6 +9,8 @@ BasicUpstart2(main)
 .var head_pointer_lsb = $FE   // head pointer low byte
 .var head_pointer_msb = $FF   // head pointer high byte
 
+.var bg_colour = $00    // background colour
+.var brd_colour = $0b   // border colour
 .var food_char = $07    // character to be used for food.
 
 main:
@@ -18,20 +20,25 @@ main:
     lda #$80  // noise waveform, gate bit off
     sta $D412 // voice 3 control register
 
+    lda #bg_colour      // set background colour
+    sta $d021
+    lda #brd_colour
+    sta $d020
+    jmp start_game
+
+start_game:
     lda $D018 // set character memory to start from ram at $3000
     ora #$0c
     sta $d018
-
-    jsr init
-    jsr loop
-
-init:
     //  initiate variables to zero
     lda #$00
     sta direction
     sta food_flag
     sta length_msb
     sta head_pointer_lsb
+
+    lda #$00
+    sta speed_setting
 
     lda #$0c
     sta head_pointer_msb
@@ -137,7 +144,7 @@ reset:
     inx
     inx
     txs
-    jmp init
+    jmp main
 
 screen_address:         // finds the screen address for the coordinates in head_row / head_column
     lda #$00            // re-initialise screen address to top left corner
@@ -266,13 +273,6 @@ draw:
     lda #$00
     sta (screen_lsb),y
 
-    // lda screen_msb
-    // clc
-    // adc #$d4
-    // sta screen_msb
-    // lda #$06            // blue colour
-    // sta (screen_lsb),y
-
     // increment head_pointer
     clc
     lda head_pointer_lsb
@@ -344,23 +344,20 @@ spawn_food:              // spawns a food in a random location
     pha
     
 rand_row:
-    lda $D41B           //get random 8 bit (0 - 255) number from SID
-    lsr                 //divide by 2 to give random number between 0 - 127
-    lsr                 //divide by 2 to give random number between 0 - 63
-    lsr                 //divide by 2 to give random number between 0 - 31
+    lda $D41B           // get random 8 bit (0 - 255) number from SID
+    and #%00011111      // mask to 5 bit (0-31)
     cmp #3              // lower bound
     bmi rand_row
     cmp #24             // upper bound  compare to see if is in range
-    bcs rand_row        //if the number is too large, try again
+    bcs rand_row        // if the number is too large, try again
     sta head_row
-rand_col:               //generate a random number between 0-39 for column
-    lda $D41B           //get random 8 bit (0 - 255) number from SID
-    lsr                 //divide by 2 to give random number between 0 - 127
-    lsr                 //divide by 2 to give random number between 0 - 63
+rand_col:               // generate a random number between 0-39 for column
+    lda $D41B           // get random 8 bit (0 - 255) number from SID
+    and #$00111111      // mask to 6 bit (0 - 63)
     cmp #03             // lower bound
     bmi rand_col
     cmp #37             // upper bound  compare to see if is in range
-    bcs rand_col        //if the number is too large, try again
+    bcs rand_col        // if the number is too large, try again
     sta head_column
     jsr screen_address
     ldy #$00           
@@ -370,7 +367,7 @@ rand_col:               //generate a random number between 0-39 for column
 
 !:  lda $D41B
     and #%00001111
-    cmp #$06            // check it's not the background colour (blue)
+    cmp #bg_colour      // check this isn't the same as the background colour
     beq !-              // if it is, try again
     sta food_colour
     lda screen_msb      // backup msb to stack
@@ -444,22 +441,33 @@ body_char:             // works out which corner character needs to be drawn, pu
     rts
 
 delay:
-    txa
+    txa                 // backup x
     pha
-    tya
+    tya                 // backup y
     pha
     ldx #$FF
-    ldy #$3a
+    lda speed_setting   // load speed setting
+    cmp #$01
+    beq med_speed
+    bcs high_speed
+    ldy #$55
 delay_loop:
     dex
     bne delay_loop
     dey
     bne delay_loop
     pla
-    tay
+    tay                 // restore y
     pla
-    tax
+    tax                 // restor x
     rts
+med_speed:
+    ldy #$3a
+    jmp delay_loop
+high_speed:
+    ldy #$20
+    jmp delay_loop
+
 
 clear_screen:   // fill screen with space characters $0400 - $07FF
     ldx #$00
@@ -484,6 +492,8 @@ path_offset:        .word $0000  // 16 bit offset to be applied when looking up 
 tail_direction:     .byte 0
 snake_colour:       .byte 0
 food_colour:        .byte 0
+speed_setting:      .byte 0
+
 
 * = $0c00
 path_lo:  .fill 1024, 0
