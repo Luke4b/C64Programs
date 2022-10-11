@@ -9,6 +9,10 @@ BasicUpstart2(main)
 .var head_pointer_lsb = $FE   // head pointer low byte
 .var head_pointer_msb = $FF   // head pointer high byte
 
+// head_path_pointer might be a better name?
+// add additional memory location for temp msb and lsb so the pointer 
+// (and also head_row, head_column) don't have to keep being backed up to the stack.
+
 .var bg_colour = $00    // background colour
 .var brd_colour = $0b   // border colour
 .var food_char = $07    // character to be used for food.
@@ -459,7 +463,7 @@ delay_loop:
     pla
     tay                 // restore y
     pla
-    tax                 // restor x
+    tax                 // restore x
     rts
 med_speed:
     ldy #$3a
@@ -494,6 +498,7 @@ snake_colour:       .byte 0
 food_colour:        .byte 0
 speed_setting:      .byte 0
 
+screen_table:   .lohifill 25, $0400 + [i * 40]     // table of the memory locations for the first column in each row
 
 * = $0c00
 path_lo:  .fill 1024, 0
