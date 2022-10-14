@@ -1,0 +1,64 @@
+<C64debugger version="1.0">
+   <Sources values="INDEX,FILE">
+      0,KickAss.jar:/include/autoinclude.asm
+      1,F:\c64code\C64Programs\Snake\multitest.asm
+   </Sources>
+
+   <Segment name="Default" dest="" values="START,END,FILE_IDX,LINE1,COL1,LINE2,COL2">
+      <Block name="Basic">
+         $0801,$0802,0,56,2,56,6
+         $0803,$0804,0,57,5,57,9
+         $0805,$0805,0,58,5,58,9
+         $0806,$0809,0,59,2,59,6
+         $080a,$080a,0,60,2,60,6
+         $080b,$080c,0,62,5,62,9
+      </Block>
+      <Block name="Basic End">
+         $080e,$0810,1,11,5,11,7
+         $0811,$0812,1,12,5,12,7
+         $0813,$0815,1,13,5,13,7
+         $0816,$0818,1,15,5,15,7
+         $0819,$081a,1,16,5,16,7
+         $081b,$081d,1,17,5,17,7
+         $081e,$081f,1,20,5,20,7
+         $0820,$0822,1,21,5,21,7
+         $0823,$0824,1,22,5,22,7
+         $0825,$0827,1,23,5,23,7
+         $0828,$0829,1,24,5,24,7
+         $082a,$082c,1,25,5,25,7
+         $082d,$082e,1,26,5,26,7
+         $082f,$0831,1,27,5,27,7
+         $0832,$0833,1,29,5,29,7
+         $0834,$0835,1,32,5,32,7
+         $0836,$0838,1,34,5,34,7
+         $0839,$083b,1,35,5,35,7
+         $083c,$083d,1,37,5,37,7
+         $083e,$0840,1,39,5,39,7
+         $0841,$0843,1,40,5,40,7
+         $0844,$0844,1,41,5,41,7
+         $0845,$0846,1,42,5,42,7
+         $0847,$0847,1,43,5,43,7
+      </Block>
+      <Block name="Unnamed">
+         $3000,$3007,1,47,12,47,16
+         $3008,$300f,1,48,12,48,16
+         $3010,$3017,1,49,12,49,16
+      </Block>
+   </Segment>
+
+   <Labels values="SEGMENT,ADDRESS,NAME,START,END,FILE_IDX,LINE1,COL1,LINE2,COL2">
+      Default,$080e,main,1,9,1,9,5
+      Default,$0834,cls_loop,1,31,1,31,9
+      Default,$3000,blank_spc,1,47,1,47,10
+      Default,$3008,verti_bod,1,48,1,48,10
+      Default,$3010,horiz_bod,1,49,1,49,10
+      Default,$080b,upstartEnd,0,61,1,61,11
+   </Labels>
+
+   <Breakpoints values="SEGMENT,ADDRESS,ARGUMENT">
+   </Breakpoints>
+
+   <Watchpoints values="SEGMENT,ADDRESS1,ADDRESS2,ARGUMENT">
+   </Watchpoints>
+
+</C64debugger>

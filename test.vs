@@ -1,0 +1,16 @@
+al C:823 .init
+al C:83c .add_rows_loop
+al C:84c .add_columns
+al C:8ac .head_column
+al C:868 .rand_col
+al C:85b .rand_row
+al C:85b .spawn_food
+al C:80b .upstartEnd
+al C:810 .main
+al C:82f .screen_address
+al C:897 .clear_screen
+al C:884 .delay
+al C:88c .delay_loop
+al C:826 .loop
+al C:8ab .head_row
+al C:89b .cls_loop

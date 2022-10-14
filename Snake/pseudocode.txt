@@ -1,0 +1,11 @@
+
+read keyboard input
+set direction
+update head coordinate (check and reset if AOB, if AOB reset)
+look up screen address from coordinates
+collision check to see if snake has hit itself or food (if collision with self reset)
+draw the new snake segment
+check if the food flag is set (if no food:)
+    spawn food
+    increment length
+run delay loop

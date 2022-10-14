@@ -1,0 +1,5 @@
+.label horiz_bod=$3010
+.label blank_spc=$3000
+.label cls_loop=$834
+.label main=$80e
+.label verti_bod=$3008

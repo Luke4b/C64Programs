@@ -1,0 +1,15 @@
+.label init=$823
+.label add_rows_loop=$83c
+.label add_columns=$84c
+.label head_column=$8ac
+.label rand_col=$868
+.label rand_row=$85b
+.label spawn_food=$85b
+.label main=$810
+.label screen_address=$82f
+.label clear_screen=$897
+.label delay=$884
+.label delay_loop=$88c
+.label loop=$826
+.label head_row=$8ab
+.label cls_loop=$89b

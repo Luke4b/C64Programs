@@ -1,0 +1,7 @@
+.label init=$816
+.label delay=$85a
+.label delay_loop=$862
+.label increment_colour=$851
+.label loop=$82a
+.label main=$810
+.label return=$859
