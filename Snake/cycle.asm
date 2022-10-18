@@ -9,11 +9,11 @@ BasicUpstart2(main)
 .var tmp_lsb = $FE          
 .var tmp_msb = $FF   
 
-.var width = $06
-.var height = $06
-.var random = $D41B           // address of random numbers from SID
+.label width = 6          // maximum 40 must be even number
+.label height = 6         // maximum 24 must be even number
+.label random = $D41B       // address of random numbers from SID
 
-main:
+main:  {
     // set SID chip to generate white noise (random numbers)
     lda #$FF  // maximum frequency value
     sta $D40E // voice 3 frequency low .byte
@@ -30,11 +30,146 @@ main:
     lda #$00
     sta the_column
 
+    jsr maze_gen
+
 loop:
     jsr draw
     jsr step
     jsr delay
     jmp loop
+}
+maze_gen:  {  //Modified Randomized Prim's algorithm,  the maze is half the size of the hamiltonian cycle required.
+    //1a.   Pick a cell, mark it as part of the maze. 
+    //1a.   Add the adjacent cells to a list (check if they're already there?).
+    //2.    While there are adjacent cells left in the list:
+                //Pick a random maze-adjacent cell from the list.
+                    //Make a random wall between it and the maze into a passage.
+                    //Add it's adjacent cells to the adjacency list
+                //Remove the cell from the adjacency list.
+
+
+
+initial_cell:           //1 generate an initial random row/column for first cell
+!:  lda random
+    and #%00000011      // limit in size to 4
+    cmp #[height / 2]
+    bcs !-
+    sta the_row
+!:  lda random
+    and #%00000011
+    cmp #[width / 2]
+    bcs !-
+    sta the_column
+
+loop:
+    jsr add_adjacencies
+    
+    jmp loop
+
+add_adjacencies: {          // takes the current content of the_row and the_column and adds adjacent cells
+main_routine:{              // to the adjacency lists
+    lda the_row             
+    cmp #[height/2 -1]
+    bne not_bottom
+    jmp not_top
+
+not_bottom:
+    lda the_row    
+    clc
+    adc #$01
+    sta tmprow
+    lda the_column
+    sta tmpcol
+    jsr dupecheck
+    lda dupeflag
+    bne !+
+    jsr add_adj_lists
+
+!:  lda the_row
+    beq !+
+
+not_top:
+    lda the_row
+    sec
+    sbc #$01
+    sta tmprow
+    lda the_column
+    sta tmpcol
+    jsr dupecheck
+    lda dupeflag
+    bne !+
+    jsr add_adj_lists
+
+!:
+    lda the_column
+    cmp #[width/2 -1]
+    bne not_rightmost
+    jmp not_leftmost
+
+not_rightmost:
+    lda the_row
+    sta tmprow
+    lda the_column
+    clc
+    adc #$01
+    sta tmpcol
+    jsr dupecheck
+    lda dupeflag
+    bne !+
+    jsr add_adj_lists
+
+!:  lda the_column 
+    beq !+
+
+not_leftmost:
+    lda the_row
+    sta tmprow
+    lda the_column
+    sec
+    sbc #$01
+    sta tmpcol
+    jsr dupecheck
+    lda dupeflag
+    bne !+
+    jsr add_adj_lists
+
+!:  rts
+}
+
+dupecheck:      // checks if the cell (tmprow, tmpcol) exists already in the adjacency lists
+                // sets a flag if so.
+rts
+
+add_adj_lists:  // adds the cell (tmprow, tmpcol) to the lists and increments the length.
+    ldx adjacency_length
+    lda tmprow
+    sta adjacency_rows, x
+    lda tmpcol
+    sta adjacency_rows, x
+    inc adjacency_length
+    rts
+
+}
+
+//2 add cell's adjacents to adjacency lists (lists of row/column)
+    //check for edge cases
+    //check if cell already exists within these lists, don't add twice
+
+    //3 pick a random cell from the adjacency lists
+
+    //4 make the wall between a passage
+
+    //5 remove the cell from adjacency lists.
+        //decrement the list length variable
+            //check if that was the last, if so we're done!
+        //take last item in these lists and move into the chosen cell's spot
+        
+
+
+
+}
+
+
 
 draw:
     //get the screen location to draw to
@@ -152,9 +287,9 @@ get_col_wall:
     lda the_column
     lsr
     tax                     // put the column index in the x reg
-    lda column_walls, x
+    lda column_walls_table, x
     sta tmp_lsb
-    lda column_walls + [width /2], x
+    lda #>column_walls
     sta tmp_msb
     lda (tmp_lsb), y        
     tax
@@ -183,9 +318,9 @@ get_row_wall:
     lda the_row
     lsr
     tax                     // put the row index in the x reg
-    lda row_walls, x
+    lda row_walls_table, x
     sta tmp_lsb
-    lda row_walls + [height / 2], x
+    lda #>row_walls
     sta tmp_msb
     lda (tmp_lsb), y        
     tax
@@ -210,21 +345,35 @@ delay_loop:
     tax                 // restore x
     rts
 
-number:         .byte $30
-direction:      .byte $00
+temp:               .byte $00
+number:             .byte $30
+direction:          .byte $00
+adjacency_length:   .byte $00
+blank:              .byte $00
+tmprow:             .byte $00
+tmpcol:             .byte $00
+dupeflag:           .byte $00
 
-* = $0a00 "tables"
-screen_table:   .lohifill 25, $0400 + [i * 40] // $0a00 - $0a31
-column_walls:   .lohifill 3, $0c00 + [i * 2]   // $0a32 - $0a37
-row_walls:      .lohifill 3, $0d00 + [i * 2]   // $0a38 - $0a3d
+* = $0b00 "tables"
+screen_table:         .lohifill 25, $0400 + [i * 40] // $0a00 - $0a31
+column_walls_table:   .fill [width / 2], i * [[height / 2] -1]   // $0a32 - $0a34
+row_walls_table:      .fill [height /2], i * [[width  / 2] -1]   // $0a34 - $0a36
 
 // the maze is defined by the 3x3 grid
-* = $0c00 "column_walls"
+* = $0c00 "column_walls"    // $0c99    // can be maximum of 20 x 12 = 240 = $f0
+column_walls:
 .byte   $00, $01
 .byte   $00, $00
 .byte   $01, $00
 
-* = $0d00 "row_walls"
+* = $0d00 "row_walls"      // $0d99
+row_walls:
 .byte   $00, $00
 .byte   $01, $00
 .byte   $00, $01
+
+* = $0e00 "adjacency rows"           // $0e99 maze adjacent cells, row records
+adjacency_rows:     .fill 240, $00
+
+* = $0f00 "adjacency columns"               // maze adjacent cells, column records
+adjacency_columns:  .fill 240, $00
