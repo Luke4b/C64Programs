@@ -12,6 +12,7 @@ BasicUpstart2(main)
 .label width = 6          // maximum 40 must be even number
 .label height = 6         // maximum 24 must be even number
 .label random = $D41B       // address of random numbers from SID
+.label block_char = $a0     
 
 main:  {
     // set SID chip to generate white noise (random numbers)
@@ -31,6 +32,7 @@ main:  {
     sta the_column
 
     jsr maze_gen
+.break
 
 loop:
     jsr draw
@@ -38,18 +40,19 @@ loop:
     jsr delay
     jmp loop
 }
-maze_gen:  {  //Modified Randomized Prim's algorithm,  the maze is half the size of the hamiltonian cycle required.
-    //1a.   Pick a cell, mark it as part of the maze. 
-    //1a.   Add the adjacent cells to a list (check if they're already there?).
-    //2.    While there are adjacent cells left in the list:
-                //Pick a random maze-adjacent cell from the list.
-                    //Make a random wall between it and the maze into a passage.
-                    //Add it's adjacent cells to the adjacency list
-                //Remove the cell from the adjacency list.
+maze_gen:  {  
+    //Modified Randomized Prim's algorithm,  the maze is half the size of the hamiltonian cycle required.
+    //1.   Pick a cell, mark it as part of the maze. 
+    //2.   Add the adjacent cells to a list (check if they're already there?).
+    //3.   Pop a random maze-adjacent cell from the list.
+                //move the last item into it's space and dec the length
+    //4.   Make a random wall between it and the maze into a passage.
+                //Add it's adjacent cells to the adjacency list
+    //5.   Check if the list of maze-adjacent cells is length 0, if so we're done.
 
 
-
-initial_cell:           //1 generate an initial random row/column for first cell
+//1 generate an initial random row/column for first cell
+initial_cell:           
 !:  lda random
     and #%00000011      // limit in size to 4
     cmp #[height / 2]
@@ -60,12 +63,31 @@ initial_cell:           //1 generate an initial random row/column for first cell
     cmp #[width / 2]
     bcs !-
     sta the_column
-
-loop:
+    jsr add_cell
     jsr add_adjacencies
-    
-    jmp loop
 
+maze_gen_loop:
+    jsr pick_adjacent
+    jsr create_passage
+
+    lda adjacency_length
+    bne maze_gen_loop
+    jmp *
+
+add_cell:                       // writes a block character to the screen
+    ldx the_row
+    lda screen_table, x
+    sta screen_lsb
+    lda screen_table + 25, x
+    sta screen_msb
+    ldy the_column
+    lda #block_char
+    sta (screen_lsb), y
+    rts
+
+//2 add cell's adjacents to adjacency lists (lists of row/column)
+    //check for edge cases
+    //check if cell already exists within these lists, don't add twice
 add_adjacencies: {          // takes the current content of the_row and the_column and adds adjacent cells
 main_routine:{              // to the adjacency lists
     lda the_row             
@@ -135,7 +157,6 @@ loop:
     cmp tmprow
     bne next
     rts               // if row matches it's a duplicate, return early without adding
-
 next:
     dex               // if not decrement index to try again
     bne loop          // if x hasn't reached zero there are still entries to try.
@@ -149,24 +170,108 @@ next:
 }
 }
 
-//2 add cell's adjacents to adjacency lists (lists of row/column)
-    //check for edge cases
-    //check if cell already exists within these lists, don't add twice
+//3 pick a random cell from the adjacency lists, add to maze (stored in screen memory)
+pick_adjacent: {
+!:  ldx random
+    cpx adjacency_length
+    bcs !-                  // if it's larger than the length of the adjacency list try again
+    
+    lda adjacency_rows, x
+    sta the_row
+    lda adjacency_columns, x
+    sta the_column
 
-    //3 pick a random cell from the adjacency lists
-
-    //4 make the wall between a passage
-
-    //5 remove the cell from adjacency lists.
-        //decrement the list length variable
-            //check if that was the last, if so we're done!
-        //take last item in these lists and move into the chosen cell's spot
-        
-
-
-
+    jsr add_cell            // add cell to maze (stored in screen ram)
+    
+    stx temp                // move last entry in adjacency list down to fill this one's place
+    ldx adjacency_length
+    lda adjacency_rows, x
+    ldx temp
+    sta adjacency_rows, x
+    ldx adjacency_length
+    lda adjacency_columns, x
+    ldx temp
+    sta adjacency_columns, x
+    dec adjacency_length
+    rts
 }
 
+//4 make a random wall between this cell and the maze into a passage.
+create_passage: {
+    lda random
+    and #%00000011           // random number between 0-3 for direction
+    beq !up+
+    cmp #$01
+    beq !down+
+    cmp #$02
+    beq !left+
+!right:
+    lda the_row
+    sta tmprow
+    lda the_column
+    cmp #[[width /2] -1]
+    beq create_passage      // if this is the rightmost column, try again with new random direction
+    clc
+    adc #$01
+    sta tmpcol
+    jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
+    cmp #block_char
+    bne create_passage      // if not in the maze, try again
+    jmp blah
+!up:
+    lda the_row
+    beq create_passage      // if this is the top row, try again with new random direction
+    sec
+    sbc #$01
+    sta tmprow
+    lda the_column
+    sta tmpcol
+    jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
+    cmp #block_char
+    bne create_passage      // if not in the maze, try again
+    jmp blah
+!down:
+    lda the_row
+    cmp #[[height/2] -1]
+    beq create_passage      // if this is the bottom row, try again with new random direction
+    clc
+    adc #$01
+    sta tmprow
+    lda the_column
+    sta tmpcol
+    jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
+    cmp #block_char
+    bne create_passage      // if not in the maze, try again
+    jmp blah
+!left:
+    lda the_row
+    sta tmprow
+    lda the_column
+    beq create_passage      // if this is the leftmost column, try again with new random direction
+    sec
+    sbc #$01
+    sta tmpcol
+    jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
+    cmp #block_char
+    bne create_passage      // if not in the maze, try again
+    jmp blah
+
+check_maze: 
+    ldx tmprow
+    ldy tmpcol
+    lda screen_table, x
+    sta screen_lsb
+    lda screen_table + 25, x
+    sta screen_msb
+    lda (screen_lsb), y
+    rts
+
+blah:
+    jsr add_adjacencies
+    rts
+
+}
+}
 
 
 draw:
@@ -350,7 +455,6 @@ adjacency_length:   .byte $00
 blank:              .byte $00
 tmprow:             .byte $00
 tmpcol:             .byte $00
-dupeflag:           .byte $00
 
 * = $0b00 "tables"
 screen_table:         .lohifill 25, $0400 + [i * 40] // $0a00 - $0a31
