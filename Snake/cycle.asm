@@ -80,12 +80,9 @@ not_bottom:
     sta tmprow
     lda the_column
     sta tmpcol
-    jsr dupecheck
-    lda dupeflag
-    bne !+
     jsr add_adj_lists
 
-!:  lda the_row
+    lda the_row
     beq !+
 
 not_top:
@@ -95,13 +92,9 @@ not_top:
     sta tmprow
     lda the_column
     sta tmpcol
-    jsr dupecheck
-    lda dupeflag
-    bne !+
     jsr add_adj_lists
 
-!:
-    lda the_column
+!:  lda the_column
     cmp #[width/2 -1]
     bne not_rightmost
     jmp not_leftmost
@@ -113,12 +106,9 @@ not_rightmost:
     clc
     adc #$01
     sta tmpcol
-    jsr dupecheck
-    lda dupeflag
-    bne !+
     jsr add_adj_lists
 
-!:  lda the_column 
+    lda the_column 
     beq !+
 
 not_leftmost:
@@ -128,27 +118,35 @@ not_leftmost:
     sec
     sbc #$01
     sta tmpcol
-    jsr dupecheck
-    lda dupeflag
-    bne !+
     jsr add_adj_lists
 
 !:  rts
 }
 
-dupecheck:      // checks if the cell (tmprow, tmpcol) exists already in the adjacency lists
-                // sets a flag if so.
-rts
 
-add_adj_lists:  // adds the cell (tmprow, tmpcol) to the lists and increments the length.
+add_adj_lists:    {   // check if already exists with adjacency list, 
+                      // if not adds the cell (tmprow, tmpcol) to the lists and increments the length.
     ldx adjacency_length
+loop:
+    lda adjacency_columns, x    // test against column
+    cmp tmpcol
+    bne next
+    lda adjacency_rows, x       // test against row
+    cmp tmprow
+    bne next
+    rts               // if row matches it's a duplicate, return early without adding
+
+next:
+    dex               // if not decrement index to try again
+    bne loop          // if x hasn't reached zero there are still entries to try.
+    ldx adjacency_length    
     lda tmprow
     sta adjacency_rows, x
     lda tmpcol
     sta adjacency_rows, x
     inc adjacency_length
     rts
-
+}
 }
 
 //2 add cell's adjacents to adjacency lists (lists of row/column)
