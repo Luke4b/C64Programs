@@ -75,13 +75,13 @@ maze_gen_loop:
 
 add_cell:                       // writes a block character to the screen
     ldx the_row
-    lda screen_table, x
-    sta screen_lsb
-    lda screen_table + 25, x
-    sta screen_msb
+    lda maze_table, x
+    sta tmp_lsb
+    lda maze_table + 12, x
+    sta tmp_msb
     ldy the_column
-    lda #block_char
-    sta (screen_lsb), y
+    lda #$01
+    sta (tmp_lsb), y
     rts
 
 //2 add cell's adjacents to adjacency lists (lists of row/column)
@@ -154,12 +154,12 @@ add_adj_lists:    {   // check if cell is already in the maze, if not;
 
     ldx tmprow            // checks that this cell isn't already part of the maze.
     ldy tmpcol
-    lda screen_table, x
-    sta screen_lsb
-    lda screen_table + 25, x
-    sta screen_msb
-    lda (screen_lsb), y
-    cmp #block_char
+    lda maze_table, x
+    sta tmp_lsb
+    lda maze_table + 12, x
+    sta tmp_msb
+    lda (tmp_lsb), y
+    cmp #$01
     bne not_in_maze
     rts
 
@@ -330,11 +330,11 @@ create_passage: {
 check_maze:                 // check if the cell in this direction is in the maze
     ldx tmprow
     ldy tmpcol
-    lda screen_table, x
-    sta screen_lsb
-    lda screen_table + 25, x
-    sta screen_msb
-    lda (screen_lsb), y
+    lda maze_table, x
+    sta tmp_lsb
+    lda maze_table + 12, x
+    sta tmp_msb
+    lda (tmp_lsb), y
     rts
 
 blah:

@@ -1,0 +1,61 @@
+.label blank=$b73
+.label column_walls=$d00
+.label check_col_wall=$aee
+.label tmprow=$b74
+.label adjacency_length=$b72
+.label main=$810 {
+  .label loop=$830
+}
+.label maze_table=$c52
+.label maze=$1000
+.label cycle=$a75
+.label turn_right=$acc
+.label random=$d41b
+.label number=$b70
+.label maze_gen=$83c {
+  .label pick_adjacent=$91c {
+  }
+  .label initial_cell=$83c
+  .label maze_gen_loop=$858
+  .label add_adjacencies=$877 {
+    .label main_routine=$877 {
+      .label not_leftmost=$8c1
+      .label not_bottom=$880
+      .label not_rightmost=$8ad
+      .label not_top=$894
+    }
+    .label add_adj_lists=$8d2 {
+      .label next=$905
+      .label not_in_maze=$8f0
+      .label loop=$8f3
+      .label first=$90c
+    }
+  }
+  .label create_passage=$955 {
+    .label check_maze=$a33
+    .label blah=$a46
+  }
+  .label add_cell=$864
+}
+.label screen_table=$c00
+.label adjacency_rows=$f00
+.label turn_left=$ade
+.label check_row_wall=$b1b
+.label row_walls_table=$c46
+.label height=$18
+.label direction=$b71
+.label temp=$b6f
+.label get_row_wall=$b32
+.label adjacency_columns=$f80
+.label draw=$a4f
+.label column_walls_table=$c32
+.label block_char=$a0
+.label clear_screen=$b48
+.label tmpcol=$b75
+.label delay=$b5c
+.label delay_loop=$b64
+.label get_col_wall=$b05
+.label width=$28
+.label cls_loop=$b4c
+.label step=$a7b
+.label row_walls=$e00
