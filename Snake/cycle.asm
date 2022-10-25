@@ -9,8 +9,8 @@ BasicUpstart2(main)
 .var tmp_lsb = $FE          
 .var tmp_msb = $FF   
 
-.label width = 6          // maximum 40 must be even number
-.label height = 6         // maximum 24 must be even number
+.label width = 40          // maximum 40 must be even number
+.label height = 24         // maximum 24 must be even number
 .label random = $D41B       // address of random numbers from SID
 .label block_char = $a0     
 
@@ -25,6 +25,7 @@ main:  {
     lda #$01  // initial direction right
     sta direction
 
+    jsr clear_screen
     jsr maze_gen
 
     // start in the top left corner
@@ -223,63 +224,110 @@ pick_adjacent: {
 create_passage: {
     lda random
     and #%00000011           // random number between 0-3 for direction
-    beq !up+
-    cmp #$01
-    beq !down+
-    cmp #$02
-    beq !left+
+    bne !+
+    jmp !up+
+!:  cmp #$01
+    bne !+
+    jmp !down+
+!:  cmp #$02
+    bne !right+
+    jmp !left+
 !right:
     lda the_row
     sta tmprow
     lda the_column
     cmp #[[width /2] -1]
-    beq create_passage      // if this is the rightmost column, try again with new random direction
-    clc
+    bne !+
+    jmp create_passage      // if this is the rightmost column, try again with new random direction
+!:  clc
     adc #$01
     sta tmpcol
     jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
     cmp #block_char
-    bne create_passage      // if not in the maze, try again
+    beq !+
+    jmp create_passage      // if not in the maze, try again
+    
+!:  ldx the_row
+    ldy the_column
+    lda row_walls_table, x
+    sta tmp_lsb
+    lda #>row_walls
+    sta tmp_msb
+    lda #$00
+    sta (tmp_lsb), y
     jmp blah
 !up:
     lda the_row
-    beq create_passage      // if this is the top row, try again with new random direction
-    sec
+    bne !+
+    jmp create_passage      // if this is the top row, try again with new random direction
+!:  sec
     sbc #$01
     sta tmprow
     lda the_column
     sta tmpcol
     jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
     cmp #block_char
-    bne create_passage      // if not in the maze, try again
+    beq !+
+    jmp create_passage      // if not in the maze, try again
+    
+!:  ldx the_column
+    ldy tmprow
+    lda column_walls_table, x
+    sta tmp_lsb
+    lda #>column_walls
+    sta tmp_msb
+    lda #$00
+    sta (tmp_lsb), y
     jmp blah
 !down:
     lda the_row
     cmp #[[height/2] -1]
-    beq create_passage      // if this is the bottom row, try again with new random direction
-    clc
+    bne !+
+    jmp create_passage      // if this is the bottom row, try again with new random direction
+!:  clc
     adc #$01
     sta tmprow
     lda the_column
     sta tmpcol
     jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
     cmp #block_char
-    bne create_passage      // if not in the maze, try again
+    beq !+
+    jmp create_passage      // if not in the maze, try again
+    
+!:  ldx the_column
+    ldy the_row
+    lda column_walls_table, x
+    sta tmp_lsb
+    lda #>column_walls
+    sta tmp_msb
+    lda #$00
+    sta (tmp_lsb), y
     jmp blah
 !left:
     lda the_row
     sta tmprow
     lda the_column
-    beq create_passage      // if this is the leftmost column, try again with new random direction
-    sec
+    bne !+
+    jmp create_passage     // if this is the leftmost column, try again with new random direction
+!:  sec
     sbc #$01
     sta tmpcol
     jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
     cmp #block_char
-    bne create_passage      // if not in the maze, try again
+    beq !+
+    jmp create_passage      // if not in the maze, try again
+
+!:  ldx the_row
+    ldy tmpcol
+    lda row_walls_table, x
+    sta tmp_lsb
+    lda #>row_walls
+    sta tmp_msb
+    lda #$00
+    sta (tmp_lsb), y
     jmp blah
 
-check_maze: 
+check_maze:                 // check if the cell in this direction is in the maze
     ldx tmprow
     ldy tmpcol
     lda screen_table, x
@@ -454,14 +502,25 @@ get_row_wall:
     tax
     rts                     // return with wall flag from maze definition in x reg
 
-    delay:
+clear_screen:   // fill screen with space characters $0400 - $07FF
+    ldx #$00
+    lda #$20    // space character
+cls_loop:
+    sta $0400,x
+    sta $0500,x
+    sta $0600,x
+    sta $0700,x
+    dex
+    bne cls_loop
+    rts
+
+delay:
     txa                 // backup x
     pha
     tya                 // backup y
     pha
     ldx #$FF
-    lda #$FF
-    ldy #$55
+    ldy #$10
 delay_loop:
     dex
     bne delay_loop
@@ -485,22 +544,20 @@ tmpcol:             .byte $00
 screen_table:         .lohifill 25, $0400 + [i * 40]
 column_walls_table:   .fill [width / 2], i * [[height / 2] -1]
 row_walls_table:      .fill [height /2], i * [[width  / 2] -1]
+maze_table:           .lohifill 12, $1000 + [i * 20]
 
 // the maze is defined by the 3x3 grid, a wall is a 1, a passageway is 0
 * = $0d00 "column_walls"    // $0c99    // can be maximum of 20 x 12 = 240 = $f0
 column_walls:   .fill [[[width/2]-1]*[height/2]], $01
-// .byte   $00, $01
-// .byte   $00, $00
-// .byte   $01, $00
 
 * = $0e00 "row_walls"      // $0d99
 row_walls:      .fill [[width/2]*[[height/2]-1]], $01
-// .byte   $00, $00
-// .byte   $01, $00
-// .byte   $00, $01
 
 * = $0f00 "adjacency rows"           // $0e99 maze adjacent cells, row records
 adjacency_rows:     .fill 128, $00
 
 * = $0f80 "adjacency columns"               // maze adjacent cells, column records
 adjacency_columns:  .fill 128, $00
+
+* = $1000 "maze"
+maze:               .fill 240, $00
