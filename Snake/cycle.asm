@@ -25,13 +25,13 @@ main:  {
     lda #$01  // initial direction right
     sta direction
 
+    jsr maze_gen
+
     // start in the top left corner
     lda #$00
     sta the_row
     lda #$00
     sta the_column
-
-    jsr maze_gen
 
 loop:
     jsr draw
@@ -53,12 +53,12 @@ maze_gen:  {
 //1 generate an initial random row/column for first cell
 initial_cell:           
 !:  lda random
-    and #%00000011      // limit in size to 4
+    and #%00011111      // limit in size to 32
     cmp #[height / 2]
     bcs !-
     sta the_row
 !:  lda random
-    and #%00000011
+    and #%00111111      // limit in size to 64
     cmp #[width / 2]
     bcs !-
     sta the_column
@@ -68,10 +68,6 @@ initial_cell:
 maze_gen_loop:
     jsr pick_adjacent
     jsr create_passage
-WAIT_KEY:
-    jsr $FFE4   
-    beq WAIT_KEY
-                     
     lda adjacency_length
     bne maze_gen_loop
     rts
@@ -194,7 +190,7 @@ first:
 //3 pick a random cell from the adjacency lists, add to maze (stored in screen memory)
 pick_adjacent: {
 !:  lda random
-    and #%00001111
+    and #%01111111
     cmp adjacency_length
     bcs !-                  // if it's larger than the length of the adjacency list try again
     tax
@@ -323,11 +319,11 @@ draw:
     cmp #$3A
     beq cycle
     rts
+
 cycle:
     lda #$30        // reset number to zero character.
     sta number
     rts
-
 
 step:   // move along path checking if there is a wall and turning (changing direction) if needed
     ldx #$00        // zero the x register, will be used as flag for a wall
@@ -485,26 +481,26 @@ blank:              .byte $00
 tmprow:             .byte $00
 tmpcol:             .byte $00
 
-* = $0b00 "tables"
-screen_table:         .lohifill 25, $0400 + [i * 40] // $0a00 - $0a31
-column_walls_table:   .fill [width / 2], i * [[height / 2] -1]   // $0a32 - $0a34
-row_walls_table:      .fill [height /2], i * [[width  / 2] -1]   // $0a34 - $0a36
+* = $0c00 "tables"
+screen_table:         .lohifill 25, $0400 + [i * 40]
+column_walls_table:   .fill [width / 2], i * [[height / 2] -1]
+row_walls_table:      .fill [height /2], i * [[width  / 2] -1]
 
-// the maze is defined by the 3x3 grid
-* = $0c00 "column_walls"    // $0c99    // can be maximum of 20 x 12 = 240 = $f0
-column_walls:
-.byte   $00, $01
-.byte   $00, $00
-.byte   $01, $00
+// the maze is defined by the 3x3 grid, a wall is a 1, a passageway is 0
+* = $0d00 "column_walls"    // $0c99    // can be maximum of 20 x 12 = 240 = $f0
+column_walls:   .fill [[[width/2]-1]*[height/2]], $01
+// .byte   $00, $01
+// .byte   $00, $00
+// .byte   $01, $00
 
-* = $0d00 "row_walls"      // $0d99
-row_walls:
-.byte   $00, $00
-.byte   $01, $00
-.byte   $00, $01
+* = $0e00 "row_walls"      // $0d99
+row_walls:      .fill [[width/2]*[[height/2]-1]], $01
+// .byte   $00, $00
+// .byte   $01, $00
+// .byte   $00, $01
 
-* = $0e00 "adjacency rows"           // $0e99 maze adjacent cells, row records
-adjacency_rows:     .fill 240, $00
+* = $0f00 "adjacency rows"           // $0e99 maze adjacent cells, row records
+adjacency_rows:     .fill 128, $00
 
-* = $0f00 "adjacency columns"               // maze adjacent cells, column records
-adjacency_columns:  .fill 240, $00
+* = $0f80 "adjacency columns"               // maze adjacent cells, column records
+adjacency_columns:  .fill 128, $00
