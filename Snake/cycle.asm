@@ -7,7 +7,7 @@ BasicUpstart2(main)
 .var screen_lsb = $FC         // screen address low .byte
 .var screen_msb = $FD         // screen address high .byte
 .var tmp_lsb = $FE          
-.var tmp_msb = $FF   
+.var tmp_msb = >$FF   
 
 .label width = 40          // maximum 40 must be even number
 .label height = 24         // maximum 24 must be even number
@@ -26,6 +26,7 @@ main:  {
 
     jsr clear_screen
     jsr maze_gen
+    jsr draw_maze
 
     // start in the top left corner
     lda #$00
@@ -158,8 +159,7 @@ add_adj_lists:    {   // check if cell is already in the maze, if not;
     lda maze_table + 12, x
     sta tmp_msb
     lda (tmp_lsb), y
-    cmp #$01
-    bne not_in_maze
+    beq not_in_maze
     rts
 
 not_in_maze:
@@ -242,8 +242,7 @@ create_passage: {
     adc #$01
     sta tmpcol
     jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
-    cmp #$01
-    beq !+
+    bne !+
     jmp create_passage      // if not in the maze, try again
     
 !:  ldx the_row
@@ -265,8 +264,7 @@ create_passage: {
     lda the_column
     sta tmpcol
     jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
-    cmp #$01
-    beq !+
+    bne !+
     jmp create_passage      // if not in the maze, try again
     
 !:  ldx the_column
@@ -289,8 +287,7 @@ create_passage: {
     lda the_column
     sta tmpcol
     jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
-    cmp #$01
-    beq !+
+    bne !+
     jmp create_passage      // if not in the maze, try again
     
 !:  ldx the_column
@@ -312,8 +309,7 @@ create_passage: {
     sbc #$01
     sta tmpcol
     jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
-    cmp #$01
-    beq !+
+    bne !+
     jmp create_passage      // if not in the maze, try again
 
 !:  ldx the_row
@@ -344,6 +340,42 @@ blah:
 
 
 }
+}
+
+draw_maze: {
+    lda #$00
+    sta tmprow       // used for screen location lsb in this routine
+    lda #$00
+    sta tmpcol        // used for screen location msb in this routine
+
+    ldx tmprow
+    ldy tmpcol
+    lda screen_table, x
+    sta screen_lsb
+    lda screen_table + 25, x
+    sta screen_msb
+
+    tya
+    and #%00000001
+    beq odd_col
+even_col:
+    txa
+    and #%00000001
+    beq even_col_odd_row
+    //even column and even row
+    lda #$a0    // full block character
+    sta (screen_lsb), y
+odd_col:
+    txa
+    and #%00000001
+    beq odd_colandrow
+    //odd column and even row
+even_col_odd_row:
+    // even column and odd row
+odd_colandrow:
+    // odd column and odd row
+
+
 }
 
 draw:
@@ -519,7 +551,7 @@ delay:
     tya                 // backup y
     pha
     ldx #$FF
-    ldy #$10
+    ldy #$01
 delay_loop:
     dex
     bne delay_loop
@@ -532,6 +564,7 @@ delay_loop:
     rts
 
 temp:               .byte $00
+tmp2:               .byte $00
 number:             .byte $30
 direction:          .byte $00
 adjacency_length:   .byte $00
