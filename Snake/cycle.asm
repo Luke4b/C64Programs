@@ -11,8 +11,7 @@ BasicUpstart2(main)
 
 .label width = 40          // maximum 40 must be even number
 .label height = 24         // maximum 24 must be even number
-.label random = $D41B       // address of random numbers from SID
-.label block_char = $a0     
+.label random = $D41B       // address of random numbers from SID  
 
 main:  {
     // set SID chip to generate white noise (random numbers)
@@ -243,7 +242,7 @@ create_passage: {
     adc #$01
     sta tmpcol
     jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
-    cmp #block_char
+    cmp #$01
     beq !+
     jmp create_passage      // if not in the maze, try again
     
@@ -266,7 +265,7 @@ create_passage: {
     lda the_column
     sta tmpcol
     jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
-    cmp #block_char
+    cmp #$01
     beq !+
     jmp create_passage      // if not in the maze, try again
     
@@ -290,7 +289,7 @@ create_passage: {
     lda the_column
     sta tmpcol
     jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
-    cmp #block_char
+    cmp #$01
     beq !+
     jmp create_passage      // if not in the maze, try again
     
@@ -313,7 +312,7 @@ create_passage: {
     sbc #$01
     sta tmpcol
     jsr check_maze          // loads 'a' reg with contents of (tmprow, tmpcol) from maze in screen ram
-    cmp #block_char
+    cmp #$01
     beq !+
     jmp create_passage      // if not in the maze, try again
 
