@@ -32,7 +32,6 @@ main:  {
     sta the_column
 
     jsr maze_gen
-.break
 
 loop:
     jsr draw
@@ -69,10 +68,13 @@ initial_cell:
 maze_gen_loop:
     jsr pick_adjacent
     jsr create_passage
-
+WAIT_KEY:
+    jsr $FFE4   
+    beq WAIT_KEY
+                     
     lda adjacency_length
     bne maze_gen_loop
-    jmp *
+    rts
 
 add_cell:                       // writes a block character to the screen
     ldx the_row
@@ -95,7 +97,7 @@ main_routine:{              // to the adjacency lists
     bne not_bottom
     jmp not_top
 
-not_bottom:
+not_bottom:                 // add the cell below
     lda the_row    
     clc
     adc #$01
@@ -108,7 +110,7 @@ not_bottom:
     beq !+
 
 not_top:
-    lda the_row
+    lda the_row             //add the cell above
     sec
     sbc #$01
     sta tmprow
@@ -121,7 +123,7 @@ not_top:
     bne not_rightmost
     jmp not_leftmost
 
-not_rightmost:
+not_rightmost:              //add the cell to the right
     lda the_row
     sta tmprow
     lda the_column
@@ -133,7 +135,7 @@ not_rightmost:
     lda the_column 
     beq !+
 
-not_leftmost:
+not_leftmost:               //add the cell to the left
     lda the_row
     sta tmprow
     lda the_column
@@ -146,10 +148,28 @@ not_leftmost:
 }
 
 
-add_adj_lists:    {   // check if already exists with adjacency list, 
+add_adj_lists:    {   // check if cell is already in the maze, if not;
+                      // check if already exists with adjacency list, 
                       // if not adds the cell (tmprow, tmpcol) to the lists and increments the length.
     ldx adjacency_length
+    cpx #$00
+    beq first             // the first time the length of the list will be zero, this skips directly to saving.
+
+    ldx tmprow            // checks that this cell isn't already part of the maze.
+    ldy tmpcol
+    lda screen_table, x
+    sta screen_lsb
+    lda screen_table + 25, x
+    sta screen_msb
+    lda (screen_lsb), y
+    cmp #block_char
+    bne not_in_maze
+    rts
+
+not_in_maze:
+    ldx adjacency_length
 loop:
+    dex     
     lda adjacency_columns, x    // test against column
     cmp tmpcol
     bne next
@@ -158,13 +178,14 @@ loop:
     bne next
     rts               // if row matches it's a duplicate, return early without adding
 next:
-    dex               // if not decrement index to try again
+    cpx #$00          
     bne loop          // if x hasn't reached zero there are still entries to try.
     ldx adjacency_length    
+first:
     lda tmprow
     sta adjacency_rows, x
     lda tmpcol
-    sta adjacency_rows, x
+    sta adjacency_columns, x
     inc adjacency_length
     rts
 }
@@ -172,26 +193,32 @@ next:
 
 //3 pick a random cell from the adjacency lists, add to maze (stored in screen memory)
 pick_adjacent: {
-!:  ldx random
-    cpx adjacency_length
+!:  lda random
+    and #%00001111
+    cmp adjacency_length
     bcs !-                  // if it's larger than the length of the adjacency list try again
-    
+    tax
+    stx temp
+
     lda adjacency_rows, x
     sta the_row
     lda adjacency_columns, x
     sta the_column
-
+    
     jsr add_cell            // add cell to maze (stored in screen ram)
     
-    stx temp                // move last entry in adjacency list down to fill this one's place
+    // move last entry in adjacency list down to fill this one's place
     ldx adjacency_length
+    dex                     // the length points at the next cell, the last data is in the cell behind.
     lda adjacency_rows, x
     ldx temp
     sta adjacency_rows, x
     ldx adjacency_length
+    dex
     lda adjacency_columns, x
     ldx temp
     sta adjacency_columns, x
+
     dec adjacency_length
     rts
 }
@@ -267,12 +294,14 @@ check_maze:
     rts
 
 blah:
+    lda adjacency_length
+    beq !+
     jsr add_adjacencies
-    rts
+!:  rts
+
 
 }
 }
-
 
 draw:
     //get the screen location to draw to
