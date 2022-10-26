@@ -358,6 +358,7 @@ draw_maze: {
     tya
     and #%00000001
     beq odd_col
+
 even_col:
     txa
     and #%00000001
@@ -369,13 +370,86 @@ odd_col:
     txa
     and #%00000001
     beq odd_colandrow
-    //odd column and even row
+    //odd column and even row               // needs check to see if it's in the rightmost column.
+    lda tmprow
+    lsr
+    tax
+    lda tmpcol
+    lsr
+    tay
+    lda row_walls_table, x
+    sta tmp_lsb
+    lda #>row_walls
+    sta tmp_msb
+    lda (tmp_lsb), y
+    bne !+
+    lda #$a0
+    jmp !++
+!:  lda #$a2            // character for block with no right edge
+!:  ldy tmpcol
+    sta (screen_lsb), y
+
 even_col_odd_row:
     // even column and odd row
+    lda tmprow
+    lsr
+    tax
+    lda tmpcol
+    lsr
+    tay
+    lda column_walls_table, x
+    sta tmp_lsb
+    lda #>column_walls
+    sta tmp_msb
+    lda (tmp_lsb), y
+    bne !+
+    lda #$a0
+    jmp !++
+!:  lda #$a4            // character for block with no lower edge
+!:  ldy tmpcol
+    sta (screen_lsb), y
+
 odd_colandrow:
     // odd column and odd row
+    lda tmprow
+    lsr
+    tax
+    lda tmpcol
+    lsr
+    tay
+    lda column_walls_table, x
+    sta tmp_lsb
+    lda #>column_walls
+    sta tmp_msb
+    lda (tmp_lsb), y
+    bne !+
+    lda #$a0
+    jmp !++
+!:  lda #$a4            // character for block with no lower edge
+!:  ldy tmpcol
+    sta (screen_lsb), y
 
+    lda tmpcol
+    lsr
+    tay
+    lda row_walls_table, x
+    sta tmp_lsb
+    lda #>row_walls
+    sta tmp_msb
+    lda (tmp_lsb), y
+    beq done
+    // if not done then need to check what the previous block drawn was and modify if needed.
+    ldy tmpcol
+    lda (screen_lsb), y
+    cmp #$a0
+    beq !+
+    lda #$a5            // character for block with no lower or right edge
+    jmp !++
+!:  lda #$a2            // block with no right edge
+!:  ldy tmpcol
+    sta (screen_lsb), y
 
+done:
 }
 
 draw:
