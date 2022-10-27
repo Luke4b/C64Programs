@@ -29,6 +29,10 @@ main:  {
     lda #$01  // initial direction right
     sta direction
 
+    lda #$00
+    sta $d020
+    sta $d021
+
     jsr clear_screen
     jsr maze_gen
     jsr draw_maze
@@ -373,6 +377,8 @@ odd_col:
     lsr
     tax
     lda tmpcol
+    cmp #[width -1]             // check for rightmost column
+    beq !+
     lsr
     tay
     lda row_walls_table, x
@@ -380,8 +386,8 @@ odd_col:
     lda #>row_walls
     sta tmp_msb
     lda (tmp_lsb), y
-    bne !+
-    lda #block_char
+    bne !++
+!:  lda #block_char
     jmp !++
 !:  lda #vertwall_char            // character for block with no right edge
 !:  ldy tmpcol
@@ -393,6 +399,8 @@ even_col_odd_row:
     lsr
     tax
     lda tmprow
+    cmp #[height -1]               // check for bottom row
+    beq !+
     lsr
     tay
     lda column_walls_table, x
@@ -400,8 +408,8 @@ even_col_odd_row:
     lda #>column_walls
     sta tmp_msb
     lda (tmp_lsb), y
-    bne !+
-    lda #block_char
+    bne !++
+!:  lda #block_char
     jmp !++
 !:  lda #horizwall_char            // character for block with no lower edge
 !:  ldy tmpcol
@@ -413,6 +421,8 @@ odd_colandrow:
     lsr
     tax
     lda tmprow
+    cmp #[height -1]
+    beq !+                      // check for bottom row
     lsr
     tay
     lda column_walls_table, x
@@ -420,8 +430,8 @@ odd_colandrow:
     lda #>column_walls
     sta tmp_msb
     lda (tmp_lsb), y
-    bne !+
-    lda #block_char
+    bne !++
+!:  lda #block_char
     jmp !++
 !:  lda #horizwall_char            // character for block with no lower edge
 !:  ldy tmpcol
@@ -431,6 +441,8 @@ odd_colandrow:
     lsr
     tax
     lda tmpcol
+    cmp #[width -1]             // check for rightmost column
+    beq !+
     lsr
     tay
     lda row_walls_table, x
@@ -438,9 +450,13 @@ odd_colandrow:
     lda #>row_walls
     sta tmp_msb
     lda (tmp_lsb), y
-    beq done
+    bne !++
+    // lda #block_char
+    // ldy tmpcol
+    // sta (screen_lsb), y
+!:  jmp done
     // if not done then need to check what the previous block drawn was and modify if needed.
-    ldy tmpcol
+!:  ldy tmpcol
     lda (screen_lsb), y
     cmp #block_char
     beq !+
@@ -482,7 +498,7 @@ loop:
 //    beq loop
     jsr draw
     jsr step
-    jsr delay    inc colour
+    jsr delay    
     jmp loop
 
 draw:
@@ -497,8 +513,15 @@ draw:
     sta screen_msb
 
 //    lda number
-    lda #colour
+    lda colour
     sta (screen_lsb), y
+
+    lda the_row
+    bne !+
+    lda the_column
+    bne !+
+    inc colour
+
 
 //    inc number
 !:  jsr turn_left
@@ -660,7 +683,7 @@ delay:
     tya                 // backup y
     pha
     ldx #$FF
-    ldy #$20
+    ldy #$14
 delay_loop:
     dex
     bne delay_loop
