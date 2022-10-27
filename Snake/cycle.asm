@@ -482,27 +482,28 @@ loop:
 //    beq loop
     jsr draw
     jsr step
-    jsr delay
+    jsr delay    inc colour
     jmp loop
 
 draw:
     //get the screen location to draw to
-    ldy the_row
-    lda screen_table, y
-    clc
-    adc the_column
+    ldx the_row
+    ldy the_column
+    lda screen_table, x
     sta screen_lsb
-    lda screen_table + 25, y
-    adc #$00
+    lda screen_table + 25, x
+    clc
+    adc #$d4
     sta screen_msb
-    ldy #$00
 
-    lda number
+//    lda number
+    lda #colour
     sta (screen_lsb), y
-    inc number
-    jsr turn_left
-    lda number
-    cmp #$3A
+
+//    inc number
+!:  jsr turn_left
+//    lda number
+//    cmp #$3A
     beq cycle
     rts
 
@@ -659,7 +660,7 @@ delay:
     tya                 // backup y
     pha
     ldx #$FF
-    ldy #$30
+    ldy #$20
 delay_loop:
     dex
     bne delay_loop
@@ -679,6 +680,7 @@ adjacency_length:   .byte $00
 blank:              .byte $00
 tmprow:             .byte $00
 tmpcol:             .byte $00
+colour:             .byte $00
 
 * = $0d00 "tables"
 screen_table:         .lohifill 25, $0400 + [i * 40]
