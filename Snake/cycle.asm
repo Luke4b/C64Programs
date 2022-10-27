@@ -7,11 +7,16 @@ BasicUpstart2(main)
 .var screen_lsb = $FC         // screen address low .byte
 .var screen_msb = $FD         // screen address high .byte
 .var tmp_lsb = $FE          
-.var tmp_msb = >$FF   
+.var tmp_msb = $FF   
 
 .label width = 40          // maximum 40 must be even number
 .label height = 24         // maximum 24 must be even number
-.label random = $D41B       // address of random numbers from SID  
+.label random = $D41B       // address of random numbers from SID
+
+.label block_char = $a0
+.label vertwall_char = $e7
+.label horizwall_char = $ef
+.label wallcorner_char = $fa
 
 main:  {
     // set SID chip to generate white noise (random numbers)
@@ -27,18 +32,8 @@ main:  {
     jsr clear_screen
     jsr maze_gen
     jsr draw_maze
+    jsr follow_maze
 
-    // start in the top left corner
-    lda #$00
-    sta the_row
-    lda #$00
-    sta the_column
-
-loop:
-    jsr draw
-    jsr step
-    jsr delay
-    jmp loop
 }
 maze_gen:  {  
     //Modified Randomized Prim's algorithm,  the maze is half the size of the hamiltonian cycle required.
@@ -77,7 +72,7 @@ add_cell:                       // writes a block character to the screen
     ldx the_row
     lda maze_table, x
     sta tmp_lsb
-    lda maze_table + 12, x
+    lda #>maze
     sta tmp_msb
     ldy the_column
     lda #$01
@@ -156,7 +151,7 @@ add_adj_lists:    {   // check if cell is already in the maze, if not;
     ldy tmpcol
     lda maze_table, x
     sta tmp_lsb
-    lda maze_table + 12, x
+    lda #>maze
     sta tmp_msb
     lda (tmp_lsb), y
     beq not_in_maze
@@ -327,7 +322,7 @@ check_maze:                 // check if the cell in this direction is in the maz
     ldy tmpcol
     lda maze_table, x
     sta tmp_lsb
-    lda maze_table + 12, x
+    lda #>maze
     sta tmp_msb
     lda (tmp_lsb), y
     rts
@@ -339,6 +334,7 @@ blah:
 !:  rts
 
 
+
 }
 }
 
@@ -348,6 +344,7 @@ draw_maze: {
     lda #$00
     sta tmpcol        // used for screen location msb in this routine
 
+loop:
     ldx tmprow
     ldy tmpcol
     lda screen_table, x
@@ -357,19 +354,20 @@ draw_maze: {
 
     tya
     and #%00000001
-    beq odd_col
+    bne odd_col
 
 even_col:
     txa
     and #%00000001
-    beq even_col_odd_row
+    bne even_col_odd_row
     //even column and even row
-    lda #$a0    // full block character
+    lda #block_char    // full block character
     sta (screen_lsb), y
+    jmp done
 odd_col:
     txa
     and #%00000001
-    beq odd_colandrow
+    bne odd_colandrow
     //odd column and even row               // needs check to see if it's in the rightmost column.
     lda tmprow
     lsr
@@ -383,18 +381,18 @@ odd_col:
     sta tmp_msb
     lda (tmp_lsb), y
     bne !+
-    lda #$a0
+    lda #block_char
     jmp !++
-!:  lda #$a2            // character for block with no right edge
+!:  lda #vertwall_char            // character for block with no right edge
 !:  ldy tmpcol
     sta (screen_lsb), y
-
+    jmp done
 even_col_odd_row:
     // even column and odd row
-    lda tmprow
+    lda tmpcol
     lsr
     tax
-    lda tmpcol
+    lda tmprow
     lsr
     tay
     lda column_walls_table, x
@@ -403,18 +401,18 @@ even_col_odd_row:
     sta tmp_msb
     lda (tmp_lsb), y
     bne !+
-    lda #$a0
+    lda #block_char
     jmp !++
-!:  lda #$a4            // character for block with no lower edge
+!:  lda #horizwall_char            // character for block with no lower edge
 !:  ldy tmpcol
     sta (screen_lsb), y
-
+    jmp done
 odd_colandrow:
     // odd column and odd row
-    lda tmprow
+    lda tmpcol
     lsr
     tax
-    lda tmpcol
+    lda tmprow
     lsr
     tay
     lda column_walls_table, x
@@ -423,12 +421,15 @@ odd_colandrow:
     sta tmp_msb
     lda (tmp_lsb), y
     bne !+
-    lda #$a0
+    lda #block_char
     jmp !++
-!:  lda #$a4            // character for block with no lower edge
+!:  lda #horizwall_char            // character for block with no lower edge
 !:  ldy tmpcol
     sta (screen_lsb), y
 
+    lda tmprow
+    lsr
+    tax
     lda tmpcol
     lsr
     tay
@@ -441,16 +442,48 @@ odd_colandrow:
     // if not done then need to check what the previous block drawn was and modify if needed.
     ldy tmpcol
     lda (screen_lsb), y
-    cmp #$a0
+    cmp #block_char
     beq !+
-    lda #$a5            // character for block with no lower or right edge
+    lda #wallcorner_char            // character for block with no lower or right edge
     jmp !++
-!:  lda #$a2            // block with no right edge
+!:  lda #vertwall_char            // block with no right edge
 !:  ldy tmpcol
     sta (screen_lsb), y
 
 done:
+    lda tmpcol
+    clc
+    adc #$01
+    sta tmpcol
+    cmp #$28
+    beq !+
+    jmp loop
+!:  lda #$00
+    sta tmpcol
+    lda tmprow
+    clc
+    adc #$01
+    sta tmprow
+    cmp #$18
+    beq !+
+    jmp loop
+!:  rts
 }
+
+follow_maze: {
+    // start in the top left corner
+    lda #$00
+    sta the_row
+    lda #$00
+    sta the_column
+
+loop:
+//    jsr $ffe4   //Kernal wait key routine
+//    beq loop
+    jsr draw
+    jsr step
+    jsr delay
+    jmp loop
 
 draw:
     //get the screen location to draw to
@@ -606,6 +639,7 @@ get_row_wall:
     lda (tmp_lsb), y        
     tax
     rts                     // return with wall flag from maze definition in x reg
+}
 
 clear_screen:   // fill screen with space characters $0400 - $07FF
     ldx #$00
@@ -625,7 +659,7 @@ delay:
     tya                 // backup y
     pha
     ldx #$FF
-    ldy #$01
+    ldy #$30
 delay_loop:
     dex
     bne delay_loop
@@ -646,24 +680,24 @@ blank:              .byte $00
 tmprow:             .byte $00
 tmpcol:             .byte $00
 
-* = $0c00 "tables"
+* = $0d00 "tables"
 screen_table:         .lohifill 25, $0400 + [i * 40]
 column_walls_table:   .fill [width / 2], i * [[height / 2] -1]
 row_walls_table:      .fill [height /2], i * [[width  / 2] -1]
-maze_table:           .lohifill 12, $1000 + [i * 20]
+maze_table:           .fill 12, [i * 20]
 
 // the maze is defined by the 3x3 grid, a wall is a 1, a passageway is 0
-* = $0d00 "column_walls"    // $0c99    // can be maximum of 20 x 12 = 240 = $f0
+* = $0e00 "column_walls"      // can be maximum of 20 x 12 = 240 = $f0
 column_walls:   .fill [[[width/2]-1]*[height/2]], $01
 
-* = $0e00 "row_walls"      // $0d99
+* = $0f00 "row_walls"    
 row_walls:      .fill [[width/2]*[[height/2]-1]], $01
 
-* = $0f00 "adjacency rows"           // $0e99 maze adjacent cells, row records
+* = $1000 "adjacency rows"           // maze adjacent cells, row records
 adjacency_rows:     .fill 128, $00
 
-* = $0f80 "adjacency columns"               // maze adjacent cells, column records
+* = $1080 "adjacency columns"               // maze adjacent cells, column records
 adjacency_columns:  .fill 128, $00
 
-* = $1000 "maze"
+* = $1100 "maze"
 maze:               .fill 240, $00
