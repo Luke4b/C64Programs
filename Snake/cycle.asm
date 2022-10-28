@@ -721,7 +721,7 @@ delay:
     tya                 // backup y
     pha
     ldx #$FF
-    ldy #$10
+    ldy #$05
 delay_loop:
     dex
     bne delay_loop
@@ -774,7 +774,7 @@ tiles:  // ordering specific such that conversion can be done with addition with
 column_walls:   .fill [[[width/2]-1]*[height/2]], $01
 
 * = $0f00 "row_walls"    
-row_walls:      .fill [[width/2]*[[height/2]-1]], $01
+row_walls:      .fill [[height/2]*[[width/2]-1]], $01
 
 * = $1000 "adjacency rows"           // maze adjacent cells, row records
 adjacency_rows:     .fill 128, $00
