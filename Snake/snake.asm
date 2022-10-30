@@ -1,17 +1,32 @@
 BasicUpstart2(main)
 
-* = $0810 "program"
+//* = $0810 "program"
 
-//.var unused = $FA           //
-//.var unused = $FB           // 
-.var screen_lsb = $FC         // screen address low .byte
-.var screen_msb = $FD         // screen address high .byte
-.var head_path_pointer_lsb = $FE   // head pointer low .byte
-.var head_path_pointer_msb = $FF   // head pointer high .byte
+.var tmp_lsb = $FA              //
+.var tmp_msb = $FB              // 
+.label screen_lsb = $FC         // screen address low .byte
+.label screen_msb = $FD         // screen address high .byte
+.label head_path_pointer_lsb = $FE   // head pointer low .byte
+.label head_path_pointer_msb = $FF   // head pointer high .byte
 
-.var bg_colour = $00    // background colour
-.var brd_colour = $0b   // border colour
-.var food_char = $3f    // character to be used for food.
+.label bg_colour = $00    // background colour
+.label brd_colour = $0b   // border colour
+.label food_char = $3f    // character to be used for food.
+
+.label random = $D41B       // address of random numbers from SID
+.label width = 40          // maximum 40 must be even number
+.label height = 24         // maximum 24 must be even number
+
+.label the_row = head_row           //reused these variables during mazegen
+.label the_column = head_column    
+.label tmprow = length_lsb
+.label tmpcol = length_msb
+.label colour = snake_colour
+.label adjacency_length = tail_direction
+.label temp = prev_dir
+.label temp2 = adjacency_length
+
+#import "cycle.asm"
 
 main:
     lda #$FF  // maximum frequency value
@@ -37,9 +52,16 @@ main:
     lda #$0b            // bg colour #2, dark grey for shadow
     sta $d023
 
-    jmp start_game
+    lda #$03
+    sta speed_setting
 
-start_game:
+    //jsr clear_screen
+    //jmp game
+    jsr maze_gen
+    jsr follow_maze
+    jsr game
+
+game: {
     //  initiate variables
     lda #$00
     sta direction
@@ -296,7 +318,7 @@ draw:
     cmp #$10                    // check if the path pointer should be wrapped back around.
     beq !+
     rts
-!:  lda #$0c
+!:  lda #>path_lo
     sta head_path_pointer_msb
     rts
 
@@ -317,7 +339,7 @@ path_lookup:
     lda head_path_pointer_msb
     sbc path_offset + 1
     sta head_path_pointer_msb
-    cmp #$0c                    // check if this falls out the bottom of the path space
+    cmp #>path_lo               // check if this falls out the bottom of the path space
     bcs !+                      // and if so wrap around.
     adc #$04
     sta head_path_pointer_msb
@@ -462,18 +484,22 @@ body_char:              // works out which body character needs to be drawn, put
     rts
 !:  lda #$44           // nw_corner character
     rts
+}
 
-delay:
+
+delay:{
     txa                 // backup x
     pha
     tya                 // backup y
     pha
     ldx #$FF
+    ldy #$55            // default to speed 0 (low)
     lda speed_setting   // load speed setting
     cmp #$01
     beq med_speed
-    bcs high_speed
-    ldy #$55
+    cmp #$02
+    beq high_speed
+    jmp super_speed
 delay_loop:
     dex
     bne delay_loop
@@ -490,9 +516,13 @@ med_speed:
 high_speed:
     ldy #$20
     jmp delay_loop
+super_speed:
+    ldy #$05
+    jmp delay_loop
+}
 
 
-clear_screen:   // fill screen with space characters $0400 - $07FF
+clear_screen: {
     ldx #$00
     lda #$00    // space character
 cls_loop:
@@ -503,6 +533,7 @@ cls_loop:
     dex
     bne cls_loop
     rts
+}
 
 last_key:           .byte 0      // last key pressed
 food_flag:          .byte 0      // 1 if there is food currently on the board otherwise 0
@@ -518,97 +549,37 @@ snake_colour:       .byte 0
 food_colour:        .byte 0
 speed_setting:      .byte 0
 
-screen_table:   .lohifill 25, $0400 + [i * 40]     // table of the memory locations for the first column in each row
+screen_table:         .lohifill 25, $0400 + [i * 40]     // table of the memory locations for the first column in each row
+column_walls_table:   .fill [width / 2], i * [[height / 2] -1]
+row_walls_table:      .fill [height /2], i * [[width  / 2] -1]
+maze_table:           .fill 12, [i * 20]
+cycle_table:          .lohifill 25, cycle + [i*40]
 
-* = $0c00 "path data"       // locations for 'path' (history of previous screen locations)
+.align $100
+* = * "path data"       // locations for 'path' (history of previous screen locations)
 path_lo:  .fill 1024, 0     // $0c00 - $0FFF screen location low bytes
 path_hi:  .fill 1024, 0     // $1000 - $13FF screen location high bytes
 path_dir: .fill 1024, 0     // $1400 - $17FF directions (needed to draw correct tail)
 
-* = $1800 "hamiltonion cycle"  // 
+// the maze is defined by the 3x3 grid, a wall is a 1, a passageway is 0
+.align $100
+* = * "column_walls"      // can be maximum of 20 x 12 = 240 = $f0
+column_walls:   .fill [[[width/2]-1]*[height/2]], $01
+.align $100
+* = * "row_walls"    
+row_walls:      .fill [[height/2]*[[width/2]-1]], $01
+.align $100
+* = * "adjacency rows"           // maze adjacent cells, row records
+adjacency_rows:     .fill 128, $00
+.align $100
+* = * "adjacency columns"               // maze adjacent cells, column records
+adjacency_columns:  .fill 128, $00
+.align $100
+* = * "maze"
+maze:               .fill 240, $00
 
 *=$3000  "character set" // this character set would run to $37FF
-    .byte	$00, $00, $00, $00, $00, $00, $00, $00          // space
-	.byte	$18, $3C, $66, $7E, $66, $66, $66, $00          //A
-	.byte	$7C, $66, $66, $7C, $66, $66, $7C, $00          //B
-	.byte	$3C, $66, $60, $60, $60, $66, $3C, $00          //C
-	.byte	$78, $6C, $66, $66, $66, $6C, $78, $00          //D
-	.byte	$7E, $60, $60, $78, $60, $60, $7E, $00          //E
-	.byte	$7E, $60, $60, $78, $60, $60, $60, $00          //F
-	.byte	$3C, $66, $60, $6E, $66, $66, $3C, $00          //G
-	.byte	$66, $66, $66, $7E, $66, $66, $66, $00          //H
-	.byte	$3C, $18, $18, $18, $18, $18, $3C, $00          //I
-	.byte	$1E, $0C, $0C, $0C, $0C, $6C, $38, $00          //J
-	.byte	$66, $6C, $78, $70, $78, $6C, $66, $00          //K
-	.byte	$60, $60, $60, $60, $60, $60, $7E, $00          //L
-	.byte	$63, $77, $7F, $6B, $63, $63, $63, $00          //M
-	.byte	$66, $76, $7E, $7E, $6E, $66, $66, $00          //N
-	.byte	$3C, $66, $66, $66, $66, $66, $3C, $00          //O
-	.byte	$7C, $66, $66, $7C, $60, $60, $60, $00          //P
-	.byte	$3C, $66, $66, $66, $66, $3C, $0E, $00          //Q
-	.byte	$7C, $66, $66, $7C, $78, $6C, $66, $00          //R
-	.byte	$3C, $66, $60, $3C, $06, $66, $3C, $00          //S
-	.byte	$7E, $18, $18, $18, $18, $18, $18, $00          //T
-	.byte	$66, $66, $66, $66, $66, $66, $3C, $00          //U
-	.byte	$66, $66, $66, $66, $66, $3C, $18, $00          //V
-	.byte	$63, $63, $63, $6B, $7F, $77, $63, $00          //W
-	.byte	$66, $66, $3C, $18, $3C, $66, $66, $00          //X
-	.byte	$66, $66, $66, $3C, $18, $18, $18, $00          //Y
-	.byte	$7E, $06, $0C, $18, $30, $60, $7E, $00          //Z
-	.byte	$66, $66, $FF, $66, $FF, $66, $66, $00          //#
-	.byte	$00, $00, $7E, $00, $7E, $00, $00, $00          //=
-	.byte	$00, $00, $00, $00, $00, $18, $18, $00          //.
-	.byte	$FF, $FF, $FF, $00, $00, $00, $00, $00          // bar across top
-	.byte	$00, $00, $00, $00, $00, $FF, $FF, $FF          // bar across bottom
-	.byte	$07, $07, $07, $07, $07, $07, $07, $07          // bar on right
-	.byte	$E0, $E0, $E0, $E0, $E0, $E0, $E0, $E0          // bar on left
-	.byte	$E7, $E7, $E7, $E7, $E7, $E7, $E7, $E7          // bar both sides vertical
-	.byte	$FF, $FF, $FF, $00, $00, $FF, $FF, $FF          // bar both sides horizontal
-	.byte	$07, $07, $07, $00, $00, $E7, $E7, $E7          // inside corner, lower right
-	.byte	$E0, $E0, $E0, $00, $00, $E7, $E7, $E7          // inside corner, lower left
-	.byte	$E7, $E7, $E7, $00, $00, $00, $00, $00          // bar cross top with central divide
-	.byte	$00, $00, $00, $00, $00, $07, $07, $07          // lower right outside corner
-	.byte	$00, $00, $00, $00, $00, $E0, $E0, $E0          // lower left outside corner
-	.byte	$07, $07, $07, $00, $00, $00, $00, $00          // upper right outside corner
-	.byte	$E0, $E0, $E0, $00, $00, $00, $00, $00          // upper left outside corner
-	.byte	$9C, $9C, $9C, $94, $80, $88, $9C, $FF          // inverted W
-	.byte	$E7, $C3, $99, $81, $99, $99, $99, $FF          // inverted A
-	.byte	$C3, $99, $9F, $C3, $F9, $99, $C3, $FF          // inverted S
-	.byte	$87, $93, $99, $99, $99, $93, $87, $FF          // inverted D
-	.byte	$00, $00, $00, $00, $00, $00, $00, $00          
-	.byte	$3C, $66, $6E, $76, $66, $66, $3C, $00          // 0
-	.byte	$18, $18, $38, $18, $18, $18, $7E, $00          // 1
-	.byte	$3C, $66, $06, $0C, $30, $60, $7E, $00          // 2
-	.byte	$3C, $66, $06, $1C, $06, $66, $3C, $00          // 3
-	.byte	$06, $0E, $1E, $66, $7F, $06, $06, $00          // 4
-	.byte	$7E, $60, $7C, $06, $06, $66, $3C, $00          // 5
-	.byte	$3C, $66, $60, $7C, $66, $66, $3C, $00          // 6
-	.byte	$7E, $66, $0C, $18, $18, $18, $18, $00          // 7
-	.byte	$3C, $66, $66, $3C, $66, $66, $3C, $00          // 8
-	.byte	$3C, $66, $66, $3E, $06, $66, $3C, $00          // 9
-	.byte	$00, $00, $00, $00, $00, $00, $00, $00          
-	.byte	$00, $00, $00, $00, $00, $00, $00, $00
-	.byte	$00, $00, $00, $00, $00, $00, $00, $00
-	.byte	$00, $00, $00, $00, $00, $00, $00, $00
-	.byte	$00, $00, $00, $00, $00, $00, $00, $00
-	.byte	$3C, $B7, $F7, $FF, $FF, $BF, $BC, $28          // food
-	.byte	$B4, $B4, $94, $94, $9C, $9C, $BC, $BC          // body up
-	.byte	$00, $00, $D7, $D7, $F5, $F5, $AA, $AA          // body right
-	.byte	$BC, $BC, $B4, $B4, $94, $94, $9C, $9C          // body down
-	.byte	$00, $00, $5F, $5F, $D7, $D7, $AA, $AA          // body left
-	.byte	$00, $00, $03, $07, $17, $35, $3D, $BE          // corner lower left
-	.byte	$00, $00, $C0, $D0, $D0, $D4, $DC, $BC          // corner lower right
-	.byte	$BC, $FC, $5C, $D4, $D4, $D0, $80, $00          // corner upper left
-	.byte	$BC, $9F, $9F, $97, $97, $A7, $2A, $0A          // corner upper right
-	.byte	$34, $34, $94, $D7, $9E, $5F, $BC, $BC          // head up
-	.byte	$10, $AC, $D7, $D7, $F5, $F5, $AC, $B0          // head right
-	.byte	$BC, $BE, $F5, $B6, $D7, $94, $9C, $1C          // head down
-	.byte	$0C, $3A, $5F, $5F, $D7, $D7, $BA, $26          // head left
-	.byte	$B4, $B4, $94, $94, $90, $90, $B0, $20          // tail up
-	.byte	$00, $00, $DF, $97, $25, $09, $02, $00          // tail right
-	.byte	$0C, $0C, $24, $24, $14, $94, $9C, $9C          // tail down
-	.byte	$00, $00, $40, $50, $DC, $D7, $A8, $00          // tail left
-    .byte	$B4, $B4, $D7, $D7, $5F, $5F, $BC, $BC          // fat body up
-	.byte	$00, $1C, $D7, $D7, $F5, $F5, $BE, $AA          // fat body right
-	.byte	$BC, $BC, $F5, $F5, $D7, $D7, $9C, $9C          // fat body down
-	.byte	$00, $3C, $5F, $5F, $D7, $D7, $B6, $AA          // fat body left
+#import "charset.asm"
+
+*=*     "hamiltonian cycle"     // to store the cell numbers for the generated hamiltonian cycle
+cycle:  .lohifill 2048, $00
