@@ -128,11 +128,12 @@ game: {
     jsr clear_screen        // clear screen
     jsr spawn_food          // spawn initial piece of food
 
-    lda #$01
-    sta $d800 + 0 + [24*40]
-    sta $d800 + 1 + [24*40]
-    sta $d800 + 2 + [24*40]
-    sta $d800 + 3 + [24*40]
+    ldx #$28
+    lda #$01                // set colour of bottom row
+!:  sta $d800 + [24*40], x
+    dex
+    bpl !-
+
 
 loop:
     lda mode                // check if mode is set to auto
@@ -169,7 +170,15 @@ auto_mode: {
     jsr PrintHexValue
     lda cycle_lsb
     jsr PrintHexValue
-
+    tsx
+    txa
+    ldx #$06
+    jsr PrintHexValue
+    inx
+    lda head_path_pointer_msb
+    jsr PrintHexValue
+    lda head_path_pointer_lsb
+    jsr PrintHexValue
 
     //increment 
     clc
@@ -458,7 +467,7 @@ draw:
     lda head_path_pointer_msb
     adc #$00
     sta head_path_pointer_msb
-    cmp #$10                    // check if the path pointer should be wrapped back around.
+    cmp #[>path_lo] + $04                 // check if the path pointer should be wrapped back around.
     beq !+
     rts
 !:  lda #>path_lo
@@ -665,7 +674,7 @@ high_speed:
     ldy #$20
     jmp delay_loop
 super_speed:
-    ldy #$10
+    ldy #$01
     jmp delay_loop
 }
 
@@ -701,23 +710,6 @@ PHN_Print:      sta $0400 + [24*40],x
                 rts
 }
 
-PrintHexValue2:{ pha
-                lsr
-                lsr
-                lsr
-                lsr
-                jsr PrintHexNybble
-                pla
-                and #$0f
-PrintHexNybble: cmp #$0a
-                bcs PHN_IsLetter
-PHN_IsDigit:    ora #$30
-                bne PHN_Print
-PHN_IsLetter:   sbc #$09
-PHN_Print:      sta $0404 + [24*40],x
-                inx
-                rts
-}
 
 last_key:           .byte 0      // last key pressed
 food_flag:          .byte 0      // 1 if there is food currently on the board otherwise 0
