@@ -1,6 +1,6 @@
 BasicUpstart2(main)
 
-//* = $0810 "program"
+* = $0810 "program"
 
 .var tmp_lsb = $FA              //
 .var tmp_msb = $FB              // 
@@ -16,6 +16,7 @@ BasicUpstart2(main)
 .label random = $D41B       // address of random numbers from SID
 .label width = 40          // maximum 40 must be even number
 .label height = 24         // maximum 24 must be even number
+.label screen = $0400
 
 .label the_row = head_row           //reused these variables during mazegen
 .label the_column = head_column    
@@ -35,7 +36,7 @@ main:
     lda #$80  // noise waveform, gate bit off
     sta $D412 // voice 3 control register
 
-    lda $d016           // set multicolour mode
+    lda $d016           // set multicolour speed_setting
     ora #%00010000
     sta $d016
 
@@ -52,14 +53,49 @@ main:
     lda #$0b            // bg colour #2, dark grey for shadow
     sta $d023
 
-    lda #$03
-    sta speed_setting
 
-    //jsr clear_screen
-    //jmp game
-    jsr maze_gen
-    jsr follow_maze
-    jsr game
+    jsr menu
+
+menu: {
+    lda #$00
+    sta mode
+
+    ldx #$00
+!:  lda menu_data, x
+    sta screen, x
+    lda menu_data + $100, x
+    sta screen + $100, x
+    lda menu_data + $200, x
+    sta screen + $200, x
+    lda menu_data + $300, x
+    sta screen + $300, x
+    dex
+    bne !-
+}
+
+await_input:
+!:  lda $cb
+    cmp #$0a  // A key
+    beq auto
+    cmp #$38  // 1 key
+    beq slow
+    cmp #$3b  // 2 key
+    beq medium
+    cmp #$08  // 3 key
+    beq fast
+    jmp !-
+auto:   
+        jsr maze_gen        // generate new hamiltonian path
+        lda #$01            
+        sta mode            // set auto mode flag
+        lda #$03            // set to super speed
+        jmp !+
+slow:   lda #$00
+        jmp !+
+medium: lda #$01
+        jmp !+
+fast:   lda #$02
+!:  sta speed_setting
 
 game: {
     //  initiate variables
@@ -67,9 +103,7 @@ game: {
     sta direction
     sta food_flag
     sta length_msb
-    
-    lda #$01
-    sta speed_setting
+
 
     lda #<path_lo
     sta head_path_pointer_lsb
@@ -94,9 +128,19 @@ game: {
     jsr clear_screen        // clear screen
     jsr spawn_food          // spawn initial piece of food
 
+    lda #$01
+    sta $d800 + 0 + [24*40]
+    sta $d800 + 1 + [24*40]
+    sta $d800 + 2 + [24*40]
+    sta $d800 + 3 + [24*40]
+
 loop:
-    jsr read_keyb           // read last keypress, ignore if invalid
-    jsr step                // set direction, update head coordinate, reset if AOB
+    lda mode                // check if mode is set to auto
+    beq !+
+    jsr auto_mode           // use the hamiltian path to fake keyboard input
+    jmp !++
+!:  jsr read_keyb           // read last keypress, ignore if invalid
+!:  jsr step                // set direction, update head coordinate, reset if AOB
     jsr screen_address      // look up the screen address from coordinates
     jsr collision_check     // check if snake has collided with itself or food
     jsr draw                // draw the snake
@@ -104,8 +148,107 @@ loop:
     jsr delay               // run the delay loop according to speed setting
     jmp loop
 
+auto_mode: {
+    //load the current cycle number into cycle_lsb and cycle_msb and increment for later comparison
+    ldx head_row
+    ldy head_column
+    lda cycle_table, x
+    sta tmp_lsb
+    lda cycle_msb_table, x
+    sta tmp_msb
+    lda (tmp_lsb), y
+    sta cycle_msb
+    lda cycle_table + 25, x
+    sta tmp_msb
+    lda (tmp_lsb), y
+    sta cycle_lsb
+
+    //print for debugging
+    ldx #$00
+    lda cycle_msb
+    jsr PrintHexValue
+    lda cycle_lsb
+    jsr PrintHexValue
+
+
+    //increment 
+    clc
+    lda cycle_lsb
+    adc #$01
+    sta cycle_lsb
+    lda cycle_msb
+    adc #$00
+    sta cycle_msb
+
+    //check hasn't reached 960 ($03c0) where the number wraps
+    cmp #$03
+    bne !+
+    lda cycle_lsb
+    cmp #$c0
+    bne !+
+    // if it has, reset to zero
+    lda #$00
+    sta cycle_lsb
+    sta cycle_msb
+!:
+    ldx head_row
+    // check left (dey)
+    dey
+    lda (tmp_lsb), y
+    cmp cycle_lsb
+    beq !left+
+
+    // check right (iny)
+    iny
+    iny
+    lda (tmp_lsb), y
+    cmp cycle_lsb
+    beq !right+
+
+    // check above (dex)
+    dey
+    dex
+    lda cycle_table, x
+    sta tmp_lsb
+    lda cycle_table + 25, x
+    sta tmp_msb
+    lda (tmp_lsb), y
+    cmp cycle_lsb
+    beq !up+
+
+    // check below (inx)
+    inx
+    inx
+    lda cycle_table, x
+    sta tmp_lsb
+    lda cycle_table + 25, x
+    sta tmp_msb
+    lda (tmp_lsb), y
+    cmp cycle_lsb
+    beq !down+
+
+    jmp *
+
+!up:
+    lda #$09
+    sta last_key
+    rts
+!right:
+    lda #$12
+    sta last_key
+    rts
+!down:
+    lda #$0d
+    sta last_key
+    rts
+!left:
+    lda #$0a
+    sta last_key
+    rts
+}
+
 read_keyb:          // reads keyboard input
-    ldx $c5         // read keyboard buffer
+    ldx $cb         // read keyboard buffer
     lda direction   
     and #$00000001  // if direction is $01 or $03 then it's horizontal, AND gives 1 otherwise vertical, AND gives 0
     bne !horiz+
@@ -177,7 +320,7 @@ reset:
     inx
     inx
     txs
-    jmp main
+    jmp menu
 
 screen_address:                   // uses head_row and head_column value to set screen_lsb and screen_msb
     ldy head_row                  // to point at the screen location
@@ -219,7 +362,7 @@ stripes:                // switches the snake colour to the stripes colour and c
     ora #%00001000      // switch bit 3 on to enable multi-colour
     sta snake_colour
     lda food_colour
-    and #%00000111      // can only be colours 0-8 because of multicolor mode
+    and #%00000111      // can only be colours 0-8 because of multicolor speed_setting
     sta $d022
     rts
 
@@ -404,7 +547,7 @@ rand_col:               // generate a random number between 0-39 for column
     and #%00000111
     cmp #bg_colour      // check this isn't the same as the background colour
     beq !-              // if it is, try again
-    ora #%00001000      // set multicolour mode
+    ora #%00001000      // set multicolour speed_setting
     sta food_colour
     lda screen_msb      // backup msb to stack
     pha
@@ -495,6 +638,8 @@ delay:{
     ldx #$FF
     ldy #$55            // default to speed 0 (low)
     lda speed_setting   // load speed setting
+    cmp #$00
+    beq low_speed
     cmp #$01
     beq med_speed
     cmp #$02
@@ -510,6 +655,9 @@ delay_loop:
     pla
     tax                 // restore x
     rts
+low_speed:
+    ldy #$50
+    jmp delay_loop
 med_speed:
     ldy #$3a
     jmp delay_loop
@@ -517,7 +665,7 @@ high_speed:
     ldy #$20
     jmp delay_loop
 super_speed:
-    ldy #$05
+    ldy #$10
     jmp delay_loop
 }
 
@@ -535,6 +683,42 @@ cls_loop:
     rts
 }
 
+PrintHexValue:{ pha
+                lsr
+                lsr
+                lsr
+                lsr
+                jsr PrintHexNybble
+                pla
+                and #$0f
+PrintHexNybble: cmp #$0a
+                bcs PHN_IsLetter
+PHN_IsDigit:    ora #$30
+                bne PHN_Print
+PHN_IsLetter:   sbc #$09
+PHN_Print:      sta $0400 + [24*40],x
+                inx
+                rts
+}
+
+PrintHexValue2:{ pha
+                lsr
+                lsr
+                lsr
+                lsr
+                jsr PrintHexNybble
+                pla
+                and #$0f
+PrintHexNybble: cmp #$0a
+                bcs PHN_IsLetter
+PHN_IsDigit:    ora #$30
+                bne PHN_Print
+PHN_IsLetter:   sbc #$09
+PHN_Print:      sta $0404 + [24*40],x
+                inx
+                rts
+}
+
 last_key:           .byte 0      // last key pressed
 food_flag:          .byte 0      // 1 if there is food currently on the board otherwise 0
 direction:          .byte 0
@@ -548,12 +732,16 @@ tail_direction:     .byte 0
 snake_colour:       .byte 0
 food_colour:        .byte 0
 speed_setting:      .byte 0
+mode:               .byte 0
+cycle_lsb:          .byte 0
+cycle_msb:          .byte 0
 
-screen_table:         .lohifill 25, $0400 + [i * 40]     // table of the memory locations for the first column in each row
+screen_table:         .lohifill 25, screen + [i * 40]     // table of the memory locations for the first column in each row
 column_walls_table:   .fill [width / 2], i * [[height / 2] -1]
 row_walls_table:      .fill [height /2], i * [[width  / 2] -1]
 maze_table:           .fill 12, [i * 20]
 cycle_table:          .lohifill 25, cycle + [i*40]
+cycle_msb_table:      .fill 25, $04 + >[cycle + [i*40]]
 
 .align $100
 * = * "path data"       // locations for 'path' (history of previous screen locations)
@@ -582,4 +770,8 @@ maze:               .fill 240, $00
 #import "charset.asm"
 
 *=*     "hamiltonian cycle"     // to store the cell numbers for the generated hamiltonian cycle
-cycle:  .lohifill 2048, $00
+cycle:  .fill 2048, $00
+
+*=*   "menu data"
+menu_data:
+.import binary "menu.bin"

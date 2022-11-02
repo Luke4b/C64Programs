@@ -29,7 +29,7 @@ maze_gen_loop:
     jsr create_passage
     lda adjacency_length
     bne maze_gen_loop
-    rts
+    jmp cycle_gen
 
 add_cell:                       // writes a $01 to the maze location tmprow, tmpcol
     ldx the_row
@@ -301,13 +301,13 @@ blah:
 }
 }
 
-follow_maze: {
+cycle_gen: {
     // start in the top left corner facing right
     lda #$00
     sta the_row
     sta the_column
-    sta temp
-    sta temp2
+    sta cycle_lsb
+    sta cycle_msb
 
     lda #$01
     sta direction
@@ -316,22 +316,22 @@ loop:
 !:  jsr write
     jsr step
 
-    clc
-    lda temp
+    clc             // increment the number in the cycle
+    lda cycle_lsb
     adc #$01
-    sta temp
-    lda temp2
+    sta cycle_lsb
+    lda cycle_msb
     adc #$00
-    sta temp2
+    sta cycle_msb
 
-    lda the_row
+    lda the_row     // check to see if we're back to the start.
     bne loop
     lda the_column
     bne loop
     rts
 
 write:
-    //get the screen location to draw to
+    //write the number in the cycle (similar to writing to screen but 16bit number)
     ldx the_row
     ldy the_column
     lda cycle_table, x
@@ -339,15 +339,13 @@ write:
     lda cycle_table + 25, x
     sta tmp_msb
 
-    lda temp           
+    lda cycle_lsb
     sta (tmp_lsb), y
     
-    lda tmp_msb      
-    clc
-    adc #$04
+    lda cycle_msb_table, x
     sta tmp_msb
 
-    lda temp2
+    lda cycle_msb
     sta (tmp_lsb), y
 
 
