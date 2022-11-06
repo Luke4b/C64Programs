@@ -236,24 +236,29 @@ auto_mode: {
     cmp cycle_lsb
     beq !down+
 
-    jmp *
-
 !up:
     lda #$09
     sta last_key
-    rts
+    jmp check_for_reset
 !right:
     lda #$12
     sta last_key
-    rts
+    jmp check_for_reset
 !down:
     lda #$0d
     sta last_key
-    rts
+    jmp check_for_reset
 !left:
     lda #$0a
     sta last_key
-    rts
+    jmp check_for_reset
+
+check_for_reset:
+    lda $cb            // check if a key has been pressed (resets)
+    cmp #$40
+    beq !+
+    jmp reset
+!:  rts
 }
 
 read_keyb:          // reads keyboard input
@@ -674,7 +679,7 @@ high_speed:
     ldy #$20
     jmp delay_loop
 super_speed:
-    ldy #$01
+    ldy #$10
     jmp delay_loop
 }
 
@@ -759,7 +764,7 @@ adjacency_columns:  .fill 128, $00
 maze:               .fill 240, $00
 
 *=$3000  "character set" // this character set would run to $37FF
-#import "charset.asm"
+.import binary "snake - Chars.bin"
 
 *=*     "hamiltonian cycle"     // to store the cell numbers for the generated hamiltonian cycle
 cycle:  .fill 2048, $00
