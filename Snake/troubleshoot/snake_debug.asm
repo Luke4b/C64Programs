@@ -27,7 +27,7 @@ BasicUpstart2(main)
 .label temp = prev_dir
 .label temp2 = adjacency_length
 
-#import "cycle.asm"
+//#import "cycle.asm"
 
 main:
     lda #$FF  // maximum frequency value
@@ -54,58 +54,18 @@ main:
     sta $d023
 
 
-    jsr menu
 
-menu: {
-    lda #$00
-    sta mode
 
-    ldx #$00
-!:  lda menu_data, x
-    sta screen, x
-    lda menu_data + $100, x
-    sta screen + $100, x
-    lda menu_data + $200, x
-    sta screen + $200, x
-    lda menu_data + $300, x
-    sta screen + $300, x
-    lda #WHITE
-    sta screen + $d400, x
-    sta screen + $d500, x
-    sta screen + $d600, x
-    sta screen + $d700, x
-    dex
-    bne !-
-}
 
-await_input:
-!:  lda $cb
-    cmp #$0a  // A key
-    beq auto
-    cmp #$38  // 1 key
-    beq slow
-    cmp #$3b  // 2 key
-    beq medium
-    cmp #$08  // 3 key
-    beq fast
-    jmp !-
-auto:   
-        jsr maze_gen        // generate new hamiltonian path
         lda #$01            
         sta mode            // set auto mode flag
-        lda #$03            // set to super speed
-        jmp !+
-slow:   lda #$00
-        jmp !+
-medium: lda #$01
-        jmp !+
-fast:   lda #$02
-!:  sta speed_setting
+        lda #$03            
+    sta speed_setting
 
 game: {
     //  initiate variables
     lda #$00
-    sta direction
+
     sta food_flag
     sta length_msb
 
@@ -121,13 +81,15 @@ game: {
     lda #$02
     sta length_lsb       // starting length
 
-    lda #$09            //  default value for last key (to match default direction of up/$00)
+    lda #$12            //  default value for last key (to match default direction of up/$00)
     sta last_key
+    lda #$01
+    sta direction
 
     // starting location in approximately screen centre
-    lda #12             // $0C
+    lda #00             // $0C
     sta head_row
-    lda #19             // $13
+    lda #00             // $13
     sta head_column
 
     jsr clear_screen        // clear screen
@@ -259,10 +221,6 @@ auto_mode: {
     jmp check_for_reset
 
 check_for_reset:
-    lda $cb            // check if a key has been pressed (resets)
-    cmp #$40
-    beq !+
-    jmp reset
 !:  rts
 }
 
@@ -339,7 +297,7 @@ reset:
     inx
     inx
     txs
-    jmp menu
+    rts
 
 screen_address:                   // uses head_row and head_column value to set screen_lsb and screen_msb
     ldy head_row                  // to point at the screen location
@@ -358,7 +316,7 @@ collision_check:
     cmp #food_char              // check if that has food character
     beq fed
     cmp #$00                    // check for 'space' character
-    bne reset
+    bne *
     rts
 fed:
     lda #$00
@@ -436,32 +394,32 @@ draw:
     ldy #$00
     sta (screen_lsb),y
 
-    // draw the tail
-    sec
-    lda length_lsb                 // subtract 1 from the length to find the tail space 
-    sbc #$01
-    sta path_offset + 0
-    lda length_msb
-    sbc #$00
-    sta path_offset + 1
+    // // draw the tail
+    // sec
+    // lda length_lsb                 // subtract 1 from the length to find the tail space 
+    // sbc #$01
+    // sta path_offset + 0
+    // lda length_msb
+    // sbc #$00
+    // sta path_offset + 1
 
-    jsr path_lookup
-    lda #$4c                        // tail character
-    clc
-    adc tail_direction
-    ldy #$00
-    sta (screen_lsb),y    
+    // jsr path_lookup
+    // lda #$4c                        // tail character
+    // clc
+    // adc tail_direction
+    // ldy #$00
+    // sta (screen_lsb),y    
 
-    // remove the old tail (overwrite with a blank space)
-    lda length_lsb
-    sta path_offset + 0
-    lda length_msb
-    sta path_offset + 1
+    // // remove the old tail (overwrite with a blank space)
+    // lda length_lsb
+    // sta path_offset + 0
+    // lda length_msb
+    // sta path_offset + 1
 
-    jsr path_lookup
-    ldy #$00
-    lda #$00
-    sta (screen_lsb),y
+    // jsr path_lookup
+    // ldy #$00
+    // lda #$00
+    // sta (screen_lsb),y
 
     lda food_flag       
     and #%00000001      // check if bit 0 is set (there is no food so the snake must have eaten this loop)
@@ -684,7 +642,7 @@ high_speed:
     ldy #$20
     jmp delay_loop
 super_speed:
-    ldy #$10
+    ldy #$60
     jmp delay_loop
 }
 
@@ -725,8 +683,8 @@ last_key:           .byte 0      // last key pressed
 food_flag:          .byte 0      // 1 if there is food currently on the board otherwise 0
 direction:          .byte 0
 prev_dir:           .byte 0
-head_row:           .byte 0      // y-coordinate, zero being top
-head_column:        .byte 0      // x-coordinate, zero being left
+// head_row:           .byte 0      // y-coordinate, zero being top
+// head_column:        .byte 0      // x-coordinate, zero being left
 length_lsb:         .byte 0      // snake length low .byte
 length_msb:         .byte 0      // snake length high .byte
 path_offset:        .word $0000  // 16 bit offset to be applied when looking up screen locations from the path.
@@ -772,8 +730,9 @@ maze:               .fill 240, $00
 .import binary "snake - Chars.bin"
 
 *=*     "hamiltonian cycle"     // to store the cell numbers for the generated hamiltonian cycle
-cycle:  .fill 2048, $00
+cycle:  
+.import binary "goodloop.bin"
 
-*=*   "menu data"
-menu_data:
-.import binary "menu.bin"
+*= $4400
+head_row:           .byte 0      // y-coordinate, zero being top
+head_column:        .byte 0      // x-coordinate, zero being left
