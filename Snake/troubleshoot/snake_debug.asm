@@ -10,7 +10,7 @@ BasicUpstart2(main)
 .label head_path_pointer_msb = $FF   // head pointer high .byte
 
 .label bg_colour = $00    // background colour
-.label brd_colour = $0b   // border colour
+.label brd_colour = $0b   // border colour>
 .label food_char = $3f    // character to be used for food.
 
 .label random = $D41B       // address of random numbers from SID
@@ -120,15 +120,10 @@ auto_mode: {
     //load the current cycle number into cycle_lsb and cycle_msb and increment for later comparison
     ldx head_row
     ldy head_column
-    lda cycle_table, x
-    sta tmp_lsb
-    lda cycle_msb_table, x
-    sta tmp_msb
-    lda (tmp_lsb), y
+    jsr check
+    lda >next_cycle
     sta cycle_msb
-    lda cycle_table + 25, x
-    sta tmp_msb
-    lda (tmp_lsb), y
+    lda <next_cycle
     sta cycle_lsb
 
     //print for debugging
@@ -137,10 +132,17 @@ auto_mode: {
     jsr PrintHexValue
     lda cycle_lsb
     jsr PrintHexValue
-    tsx
-    txa
-    ldx #$06
+    inx
+    
+    lda cycle + $0428       //print location below top left cell
     jsr PrintHexValue
+    lda cycle + $28
+    jsr PrintHexValue
+
+    // tsx
+    // txa
+    // ldx #$06
+    // jsr PrintHexValue
     inx
     lda head_path_pointer_msb
     jsr PrintHexValue
@@ -170,38 +172,38 @@ auto_mode: {
     ldx head_row
     // check left (dey)
     dey
-    lda (tmp_lsb), y
+    jsr check
+    lda <next_cycle
     cmp cycle_lsb
+    bne !+
+    lda >next_cycle
+    cmp cycle_msb
     beq !left+
 
-    // check right (iny)
+!:  // check right (iny)
     iny
     iny
-    lda (tmp_lsb), y
+    jsr check
+    lda <next_cycle
     cmp cycle_lsb
+    bne !+
+    lda >next_cycle
+    cmp cycle_msb
     beq !right+
 
-    // check above (dex)
+!:  // check above (dex)
     dey
     dex
-    lda cycle_table, x
-    sta tmp_lsb
-    lda cycle_table + 25, x
-    sta tmp_msb
-    lda (tmp_lsb), y
+    jsr check
+    lda <next_cycle
     cmp cycle_lsb
+    bne !+
+    lda >next_cycle
+    cmp cycle_msb
     beq !up+
 
-    // check below (inx)
-    inx
-    inx
-    lda cycle_table, x
-    sta tmp_lsb
-    lda cycle_table + 25, x
-    sta tmp_msb
-    lda (tmp_lsb), y
-    cmp cycle_lsb
-    beq !down+
+!:  // check below unecissary because it's the only option left
+    jmp !down+
 
 !up:
     lda #$09
@@ -219,6 +221,19 @@ auto_mode: {
     lda #$0a
     sta last_key
     jmp check_for_reset
+
+check:                          // looks up cycle lsb/msb indexed by x and y. stored in next_cycle word
+    lda cycle_table, x
+    sta tmp_lsb
+    lda cycle_msb_table, x
+    sta tmp_msb
+    lda (tmp_lsb), y
+    sta >next_cycle
+    lda cycle_table + 25, x
+    sta tmp_msb
+    lda (tmp_lsb), y
+    sta <next_cycle
+    rts
 
 check_for_reset:
 !:  rts
@@ -310,13 +325,17 @@ screen_address:                   // uses head_row and head_column value to set 
     sta screen_msb
     rts
 
+collided:
+.break
+    jmp *
+
 collision_check:
     ldy #$00
     lda (screen_lsb),y          // load head position in screen ram
     cmp #food_char              // check if that has food character
     beq fed
     cmp #$00                    // check for 'space' character
-    bne *
+    bne collided
     rts
 fed:
     lda #$00
@@ -501,7 +520,7 @@ spawn_food:              // spawns a food in a random location
 rand_row:
     lda $D41B           // get random 8 bit (0 - 255) number from SID
     and #%00011111      // mask to 5 bit (0-31)
-    cmp #3              // lower bound
+    cmp #0              // lower bound
     bmi rand_row
     cmp #24             // upper bound  compare to see if is in range
     bcs rand_row        // if the number is too large, try again
@@ -509,9 +528,9 @@ rand_row:
 rand_col:               // generate a random number between 0-39 for column
     lda $D41B           // get random 8 bit (0 - 255) number from SID
     and #$00111111      // mask to 6 bit (0 - 63)
-    cmp #03             // lower bound
+    cmp #0             // lower bound
     bmi rand_col
-    cmp #37             // upper bound  compare to see if is in range
+    cmp #39             // upper bound  compare to see if is in range
     bcs rand_col        // if the number is too large, try again
     sta head_column
     jsr screen_address
@@ -642,7 +661,7 @@ high_speed:
     ldy #$20
     jmp delay_loop
 super_speed:
-    ldy #$60
+    ldy #$15
     jmp delay_loop
 }
 
@@ -695,6 +714,7 @@ speed_setting:      .byte 0
 mode:               .byte 0
 cycle_lsb:          .byte 0
 cycle_msb:          .byte 0
+next_cycle:         .word $0000
 
 screen_table:         .lohifill 25, screen + [i * 40]     // table of the memory locations for the first column in each row
 column_walls_table:   .fill [width / 2], i * [[height / 2] -1]
@@ -731,7 +751,7 @@ maze:               .fill 240, $00
 
 *=*     "hamiltonian cycle"     // to store the cell numbers for the generated hamiltonian cycle
 cycle:  
-.import binary "goodloop.bin"
+.import binary "cycle.bin"
 
 *= $4400
 head_row:           .byte 0      // y-coordinate, zero being top

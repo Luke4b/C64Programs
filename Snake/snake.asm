@@ -158,15 +158,10 @@ auto_mode: {
     //load the current cycle number into cycle_lsb and cycle_msb and increment for later comparison
     ldx head_row
     ldy head_column
-    lda cycle_table, x
-    sta tmp_lsb
-    lda cycle_msb_table, x
-    sta tmp_msb
-    lda (tmp_lsb), y
+    jsr check
+    lda >next_cycle
     sta cycle_msb
-    lda cycle_table + 25, x
-    sta tmp_msb
-    lda (tmp_lsb), y
+    lda <next_cycle
     sta cycle_lsb
 
     //print for debugging
@@ -175,10 +170,17 @@ auto_mode: {
     jsr PrintHexValue
     lda cycle_lsb
     jsr PrintHexValue
-    tsx
-    txa
-    ldx #$06
+    inx
+    
+    lda cycle + $0428       //print location below top left cell
     jsr PrintHexValue
+    lda cycle + $28
+    jsr PrintHexValue
+
+    // tsx
+    // txa
+    // ldx #$06
+    // jsr PrintHexValue
     inx
     lda head_path_pointer_msb
     jsr PrintHexValue
@@ -208,38 +210,38 @@ auto_mode: {
     ldx head_row
     // check left (dey)
     dey
-    lda (tmp_lsb), y
+    jsr check
+    lda <next_cycle
     cmp cycle_lsb
+    bne !+
+    lda >next_cycle
+    cmp cycle_msb
     beq !left+
 
-    // check right (iny)
+!:  // check right (iny)
     iny
     iny
-    lda (tmp_lsb), y
+    jsr check
+    lda <next_cycle
     cmp cycle_lsb
+    bne !+
+    lda >next_cycle
+    cmp cycle_msb
     beq !right+
 
-    // check above (dex)
+!:  // check above (dex)
     dey
     dex
-    lda cycle_table, x
-    sta tmp_lsb
-    lda cycle_table + 25, x
-    sta tmp_msb
-    lda (tmp_lsb), y
+    jsr check
+    lda <next_cycle
     cmp cycle_lsb
+    bne !+
+    lda >next_cycle
+    cmp cycle_msb
     beq !up+
 
-    // check below (inx)
-    inx
-    inx
-    lda cycle_table, x
-    sta tmp_lsb
-    lda cycle_table + 25, x
-    sta tmp_msb
-    lda (tmp_lsb), y
-    cmp cycle_lsb
-    beq !down+
+!:  // check below unecissary because it's the only option left
+    jmp !down+
 
 !up:
     lda #$09
@@ -257,6 +259,19 @@ auto_mode: {
     lda #$0a
     sta last_key
     jmp check_for_reset
+
+check:                          // looks up cycle lsb/msb indexed by x and y. stored in next_cycle word
+    lda cycle_table, x
+    sta tmp_lsb
+    lda cycle_msb_table, x
+    sta tmp_msb
+    lda (tmp_lsb), y
+    sta >next_cycle
+    lda cycle_table + 25, x
+    sta tmp_msb
+    lda (tmp_lsb), y
+    sta <next_cycle
+    rts
 
 check_for_reset:
     lda $cb            // check if a key has been pressed (resets)
@@ -737,6 +752,7 @@ speed_setting:      .byte 0
 mode:               .byte 0
 cycle_lsb:          .byte 0
 cycle_msb:          .byte 0
+next_cycle:         .word $0000
 
 screen_table:         .lohifill 25, screen + [i * 40]     // table of the memory locations for the first column in each row
 column_walls_table:   .fill [width / 2], i * [[height / 2] -1]
