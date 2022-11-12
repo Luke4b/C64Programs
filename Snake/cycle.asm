@@ -8,6 +8,14 @@ maze_gen:  {
                 //Add it's adjacent cells to the adjacency list
     //5.   Check if the list of maze-adjacent cells is length 0, if so we're done.
 
+// reinitialise wall data to all walls
+        lda #$01
+        ldx #$00
+!:      sta column_walls, x
+        sta row_walls, x
+        dex
+        beq !+
+        jmp !-
 
 //1 generate an initial random row/column for first cell
 initial_cell:           
@@ -314,6 +322,7 @@ cycle_gen: {
 
 loop:
 !:  jsr write
+    jsr turn_left
     jsr step
 
     clc             // increment the number in the cycle
@@ -348,8 +357,6 @@ write:
     lda cycle_msb
     sta (tmp_lsb), y
 
-
-!:  jsr turn_left
     rts
 
 step:   // move along path checking if there is a wall and turning (changing direction) if needed

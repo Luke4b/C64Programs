@@ -326,7 +326,6 @@ screen_address:                   // uses head_row and head_column value to set 
     rts
 
 collided:
-.break
     jmp *
 
 collision_check:
@@ -751,7 +750,7 @@ maze:               .fill 240, $00
 
 *=*     "hamiltonian cycle"     // to store the cell numbers for the generated hamiltonian cycle
 cycle:  
-.import binary "cycle.bin"
+.import binary "goodloop.bin"
 
 *= $4400
 head_row:           .byte 0      // y-coordinate, zero being top
