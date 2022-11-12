@@ -35,12 +35,30 @@ main:  {
     sta $d018
 
 start:
+// initialise variables
+        lda #$00
+        sta adjacency_length
+        sta adjacency_rows
+        sta adjacency_columns
+
+//initialise walls for rows and columns
+        lda #$01
+        ldx #$00
+!:      sta column_walls, x
+        sta row_walls, x
+        dex
+        bne !-
+
+//initialise maze
+        lda #$00
+        ldx #$f0
+!:      sta maze, x
+        dex
+        bne !-
+
+
     jsr clear_screen
     jsr maze_gen
-
-    lda #$01  // re-initialize direction to right
-    sta direction
-
     jsr follow_maze
 
 }
@@ -534,6 +552,8 @@ blah:
 }
 
 follow_maze: {
+!:  jsr $ffe4   //Kernal wait key routine
+    beq !-
     // start in the top left corner
     lda #$00
     sta the_row
@@ -541,6 +561,8 @@ follow_maze: {
     sta cycle_lsb
     sta cycle_msb
 
+    lda #$01
+    sta direction
 
     // reinitialize colour
     lda #$00
@@ -575,7 +597,7 @@ loop:
     lda cycle_msb
     cmp #$03
     bne !+
-    jmp *
+    jmp main.start
 
 !:  jmp loop
 

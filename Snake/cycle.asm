@@ -8,14 +8,27 @@ maze_gen:  {
                 //Add it's adjacent cells to the adjacency list
     //5.   Check if the list of maze-adjacent cells is length 0, if so we're done.
 
-// reinitialise wall data to all walls
+// reinitialise variables
+        lda #$00
+        sta adjacency_length
+        sta adjacency_rows
+        sta adjacency_columns
+
+//reinitialise walls for rows and columns
         lda #$01
         ldx #$00
 !:      sta column_walls, x
         sta row_walls, x
         dex
-        beq !+
-        jmp !-
+        bne !-
+
+//reinitialise maze
+        lda #$00
+        ldx #$f0
+!:      sta maze, x
+        dex
+        bne !-
+
 
 //1 generate an initial random row/column for first cell
 initial_cell:           

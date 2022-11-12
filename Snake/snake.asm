@@ -767,7 +767,7 @@ path_lo:  .fill 1024, 0     // $0c00 - $0FFF screen location low bytes
 path_hi:  .fill 1024, 0     // $1000 - $13FF screen location high bytes
 path_dir: .fill 1024, 0     // $1400 - $17FF directions (needed to draw correct tail)
 
-// the maze is defined by the 3x3 grid, a wall is a 1, a passageway is 0
+// a wall is a 1, a passageway is 0
 .align $100
 * = * "column_walls"      // can be maximum of 20 x 12 = 240 = $f0
 column_walls:   .fill [[[width/2]-1]*[height/2]], $01
