@@ -5,30 +5,31 @@ maze_gen:  {
     //3.   Pop a random maze-adjacent cell from the list.
                 //move the last item into it's space and dec the length
     //4.   Make a random wall between it and the maze into a passage.
-                //Add it's adjacent cells to the adjacency list
+                //Add it's adjacent//initialise walls for rows and columns
     //5.   Check if the list of maze-adjacent cells is length 0, if so we're done.
 
-// reinitialise variables
-        lda #$00
-        sta adjacency_length
-        sta adjacency_rows
-        sta adjacency_columns
 
-//reinitialise walls for rows and columns
+//initialise walls for rows and columns
         lda #$01
         ldx #$00
 !:      sta column_walls, x
         sta row_walls, x
         dex
         bne !-
-
-//reinitialise maze
+        
+//initialise maze and adjacencies
         lda #$00
-        ldx #$f0
+        ldx #$00
 !:      sta maze, x
+        sta adjacency_rows, x
+        sta adjacency_columns, x
         dex
         bne !-
 
+// reinitialise variables
+        lda #$00
+        sta adjacency_length
+        
 
 //1 generate an initial random row/column for first cell
 initial_cell:           

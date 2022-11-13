@@ -42,16 +42,8 @@ start:
         sta row_walls, x
         dex
         bne !-
-
-//initialise cycle data
-        lda #$00
-        ldx #$FF
-!:      sta cycle,x
-        sta cycle + $FF, x
-        dex
-        bne !-
         
-//initialise maze
+//initialise maze and adjacencies
         lda #$00
         ldx #$00
 !:      sta maze, x
@@ -61,12 +53,7 @@ start:
         bne !-
 
 
-    jsr clear_screen
-!:  jsr $ffe4   //Kernal wait key routine
-    beq !-
     jsr maze_gen
-!:  jsr $ffe4   //Kernal wait key routine
-    beq !-
     jsr follow_maze
 
 }
