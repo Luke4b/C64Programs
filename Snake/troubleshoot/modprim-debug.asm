@@ -2,12 +2,12 @@ BasicUpstart2(main)
 
 * = $0810 "program"
 
-.var the_row = $FA            //
-.var the_column = $FB         // 
-.var screen_lsb = $FC         // screen address low .byte
-.var screen_msb = $FD         // screen address high .byte
-.var tmp_lsb = $FE          
-.var tmp_msb = $FF   
+.label the_row = $FA            //
+.label the_column = $FB         // 
+.label screen_lsb = $FC         // screen address low .byte
+.label screen_msb = $FD         // screen address high .byte
+.label tmp_lsb = $FE          
+.label tmp_msb = $FF   
 
 .label width = 40          // maximum 40 must be even number
 .label height = 24         // maximum 24 must be even number
@@ -35,12 +35,6 @@ main:  {
     sta $d018
 
 start:
-// initialise variables
-        lda #$00
-        sta adjacency_length
-        sta adjacency_rows
-        sta adjacency_columns
-
 //initialise walls for rows and columns
         lda #$01
         ldx #$00
@@ -49,16 +43,30 @@ start:
         dex
         bne !-
 
+//initialise cycle data
+        lda #$00
+        ldx #$FF
+!:      sta cycle,x
+        sta cycle + $FF, x
+        dex
+        bne !-
+        
 //initialise maze
         lda #$00
-        ldx #$f0
+        ldx #$00
 !:      sta maze, x
+        sta adjacency_rows, x
+        sta adjacency_columns, x
         dex
         bne !-
 
 
     jsr clear_screen
+!:  jsr $ffe4   //Kernal wait key routine
+    beq !-
     jsr maze_gen
+!:  jsr $ffe4   //Kernal wait key routine
+    beq !-
     jsr follow_maze
 
 }
@@ -297,7 +305,7 @@ first:
     sta adjacency_columns, x
     inc adjacency_length
 
-    // draw adjacencent cell
+    // draw adjacent cell
     ldx #$00
     jsr draw_cell
     lda #RED
@@ -552,8 +560,7 @@ blah:
 }
 
 follow_maze: {
-!:  jsr $ffe4   //Kernal wait key routine
-    beq !-
+
     // start in the top left corner
     lda #$00
     sta the_row
