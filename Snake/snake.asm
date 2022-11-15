@@ -155,7 +155,7 @@ loop:
     jmp loop
 
 auto_mode: {
-    //load the current cycle number into cycle_lsb and cycle_msb and increment for later comparison
+    //load the current head cycle number into cycle_lsb and cycle_msb
     ldx head_row
     ldy head_column
     jsr check
@@ -164,28 +164,28 @@ auto_mode: {
     lda <next_cycle
     sta cycle_lsb
 
-    //print for debugging
-    ldx #$00
-    lda cycle_msb
-    jsr PrintHexValue
-    lda cycle_lsb
-    jsr PrintHexValue
-    inx
-    
-    lda cycle + $0428       //print location below top left cell
-    jsr PrintHexValue
-    lda cycle + $28
-    jsr PrintHexValue
+    //load the current food cycle number into food_cycle
+    ldx food_row
+    ldy food_col
+    jsr check
+    lda >next_cycle
+    sta >food_cycle
+    lda <next_cycle
+    sta <food_cycle
 
-    // tsx
-    // txa
-    // ldx #$06
+
+
+    //print for debugging
+    // ldx #$00
+    // lda cycle_msb
     // jsr PrintHexValue
-    inx
-    lda head_path_pointer_msb
-    jsr PrintHexValue
-    lda head_path_pointer_lsb
-    jsr PrintHexValue
+    // lda cycle_lsb
+    // jsr PrintHexValue
+    // inx
+    // lda head_path_pointer_msb
+    // jsr PrintHexValue
+    // lda head_path_pointer_lsb
+    // jsr PrintHexValue
 
     //increment 
     clc
@@ -206,7 +206,7 @@ auto_mode: {
     lda #$00
     sta cycle_lsb
     sta cycle_msb
-!:
+!:  ldy head_column
     ldx head_row
     // check left (dey)
     dey
@@ -577,6 +577,12 @@ rand_col:               // generate a random number between 0-39 for column
     cmp #$00            // see if it's a suitably blank location
     bne rand_row        // if it's not blank try again!!
 
+    // store the successfully generated food coordinate in food_row/food_col
+    lda head_column
+    sta food_col
+    lda head_row
+    sta food_row
+
 !:  lda $D41B           // get random number from sid
     and #%00000111
     cmp #bg_colour      // check this isn't the same as the background colour
@@ -753,6 +759,10 @@ mode:               .byte 0
 cycle_lsb:          .byte 0
 cycle_msb:          .byte 0
 next_cycle:         .word $0000
+food_row:           .byte 0
+food_col:           .byte 0
+food_cycle:         .word $0000
+tail_cycle:         .word $0000
 
 screen_table:         .lohifill 25, screen + [i * 40]     // table of the memory locations for the first column in each row
 column_walls_table:   .fill [width / 2], i * [[height / 2] -1]
