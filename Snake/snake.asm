@@ -4,8 +4,8 @@ BasicUpstart2(main)
 
 .var tmp_lsb = $FA              //
 .var tmp_msb = $FB              // 
-.label screen_lsb = $FC         // screen address low .byte
-.label screen_msb = $FD         // screen address high .byte
+//.label screen_lsb = $FC         // screen address low .byte
+//.label screen_msb = $FD         // screen address high .byte
 .label head_path_pointer_lsb = $FE   // head pointer low .byte
 .label head_path_pointer_msb = $FF   // head pointer high .byte
 
@@ -20,10 +20,8 @@ BasicUpstart2(main)
 
 .label the_row = head_row           //reused these variables during mazegen
 .label the_column = head_column    
-.label tmprow = length_lsb
-.label tmpcol = length_msb
 .label colour = snake_colour
-.label adjacency_length = tail_direction
+.label adjacency_length = tmp_direction
 .label temp = prev_dir
 .label temp2 = adjacency_length
 
@@ -109,10 +107,10 @@ game: {
     sta food_flag
     sta length_msb
 
-
-    lda #<path_lo
+    // initialises the path pointer to where the path data is stored
+    lda #<path
     sta head_path_pointer_lsb
-    lda #>path_lo
+    lda #>path
     sta head_path_pointer_msb
 
     lda #$0e
@@ -141,13 +139,24 @@ game: {
 
 
 loop:
+    ldx #$00
+    lda head_path_pointer_msb
+    jsr PrintHexValue
+    lda head_path_pointer_lsb
+    jsr PrintHexValue
+    inx
+    lda length_msb
+    jsr PrintHexValue
+    lda length_lsb
+    jsr PrintHexValue
+
+
     lda mode                // check if mode is set to auto
     beq !+
     jsr auto_mode           // use the hamiltian path to fake keyboard input
     jmp !++
 !:  jsr read_keyb           // read last keypress, ignore if invalid
 !:  jsr step                // set direction, update head coordinate, reset if AOB
-    jsr screen_address      // look up the screen address from coordinates
     jsr collision_check     // check if snake has collided with itself or food
     jsr draw                // draw the snake
     jsr spawn_food          // check if there is food, if not spawn one, if food has been eaten increment length
@@ -159,19 +168,19 @@ auto_mode: {
     ldx head_row
     ldy head_column
     jsr check
-    lda >next_cycle
+    lda next_cycle_msb
     sta cycle_msb
-    lda <next_cycle
+    lda next_cycle_lsb
     sta cycle_lsb
 
     //load the current food cycle number into food_cycle
     ldx food_row
     ldy food_col
     jsr check
-    lda >next_cycle
-    sta >food_cycle
-    lda <next_cycle
-    sta <food_cycle
+    lda next_cycle_msb
+    sta food_cycle_msb
+    lda next_cycle_lsb
+    sta food_cycle_lsb
 
 
 
@@ -211,10 +220,10 @@ auto_mode: {
     // check left (dey)
     dey
     jsr check
-    lda <next_cycle
+    lda next_cycle_lsb
     cmp cycle_lsb
     bne !+
-    lda >next_cycle
+    lda next_cycle_msb
     cmp cycle_msb
     beq !left+
 
@@ -222,10 +231,10 @@ auto_mode: {
     iny
     iny
     jsr check
-    lda <next_cycle
+    lda next_cycle_lsb
     cmp cycle_lsb
     bne !+
-    lda >next_cycle
+    lda next_cycle_msb
     cmp cycle_msb
     beq !right+
 
@@ -233,10 +242,10 @@ auto_mode: {
     dey
     dex
     jsr check
-    lda <next_cycle
+    lda next_cycle_lsb
     cmp cycle_lsb
     bne !+
-    lda >next_cycle
+    lda next_cycle_msb
     cmp cycle_msb
     beq !up+
 
@@ -266,22 +275,22 @@ check:                          // looks up cycle lsb/msb indexed by x and y. st
     lda cycle_msb_table, x
     sta tmp_msb
     lda (tmp_lsb), y
-    sta >next_cycle
+    sta next_cycle_msb
     lda cycle_table + 25, x
     sta tmp_msb
     lda (tmp_lsb), y
-    sta <next_cycle
+    sta next_cycle_lsb
     rts
 
 check_for_reset:
     lda $cb            // check if a key has been pressed (resets)
     cmp #$40
     beq !+
-    jmp reset
+    jmp step.reset
 !:  rts
 }
 
-read_keyb:          // reads keyboard input
+read_keyb:  {        // reads keyboard input
     ldx $cb         // read keyboard buffer
     lda direction   
     and #$00000001  // if direction is $01 or $03 then it's horizontal, AND gives 1 otherwise vertical, AND gives 0
@@ -303,9 +312,9 @@ read_keyb:          // reads keyboard input
 update_key:
     sta last_key
     rts
+}
 
-
-step:
+step: {
     lda direction 
     sta prev_dir     // store the direction from the previous loop
     lda last_key
@@ -356,25 +365,28 @@ reset:
     txs
     jmp menu
 
-screen_address:                   // uses head_row and head_column value to set screen_lsb and screen_msb
-    ldy head_row                  // to point at the screen location
-    lda screen_table, y
-    clc
-    adc head_column
-    sta screen_lsb
-    lda screen_table +25, y
-    adc #$00
-    sta screen_msb
+}
+
+collision_check:  {
+    // if the head and food are at the same coordinate, snake has fed.
+    lda head_row
+    cmp food_row
+    bne !+
+    lda head_column
+    cmp food_col
+    beq fed
+
+!:  ldx head_row
+    ldy head_column
+    lda screen_table, x
+    sta tmp_lsb
+    lda screen_table + 25, x
+    sta tmp_msb
+    lda (tmp_lsb), y
+    cmp #$00                    // check for 'space' character
+    bne step.reset
     rts
 
-collision_check:
-    ldy #$00
-    lda (screen_lsb),y          // load head position in screen ram
-    cmp #food_char              // check if that has food character
-    beq fed
-    cmp #$00                    // check for 'space' character
-    bne reset
-    rts
 fed:
     lda #$00
     sta food_flag       // set food flag to 00 (no food)
@@ -391,43 +403,39 @@ fed:
     lda food_colour
     sta snake_colour    // change colour of snake (foreground)
     rts
+
 stripes:                // switches the snake colour to the stripes colour and changes the stripes to food colour
     lda $d022           // stripes colour
     ora #%00001000      // switch bit 3 on to enable multi-colour
     sta snake_colour
     lda food_colour
-    and #%00000111      // can only be colours 0-8 because of multicolor speed_setting
+    and #%00000111      // can only be colours 0-7 because of multicolor speed_setting
     sta $d022
     rts
+}
 
-draw:
+draw:   {
     // draw head
+    lda snake_colour
+    sta tmp_colour
+    ldx head_row
+    ldy head_column
     lda #$48                    // head character
     clc
-    adc direction
+    adc direction               // add direction creates correct head orientation character code
+    jsr draw_char_colour
+
+    // add the head coordinates and direction to the path data.
     ldy #$00
-    sta (screen_lsb),y
-
-    lda screen_msb
-    pha
-    adc #$d4                    // move msb up to address colour ram
-    sta screen_msb
-    lda snake_colour
-    sta (screen_lsb),y
-    pla
-    sta screen_msb
-
-    // add this new head screen location and direction to the path
-    lda screen_lsb
+    lda head_row
     sta (head_path_pointer_lsb), y
-
     lda head_path_pointer_msb
-    pha                         // temporarily push the head pointer to the stack
+    pha                         // temporarily push the head pointer msb to the stack
 
     clc
     adc #$04                    // add 1024 ($0400) to point at the path msb
     sta head_path_pointer_msb
-    lda screen_msb
+    lda head_column
     sta (head_path_pointer_lsb),y
 
     lda head_path_pointer_msb
@@ -441,42 +449,36 @@ draw:
     sta head_path_pointer_msb
 
     // redraw body behind head
-    lda #$01                    // load the path_offset with a vlaue one 1 for the space behind the head.
-    sta path_offset + 0
+    lda #$01                    // load the path_offset with a value one 1 for the space behind the head.
+    sta path_offset_lsb
     lda #$00
-    sta path_offset + 1
-
-    jsr path_lookup                // look up the screen location behind the head from the path
+    sta path_offset_msb
     jsr body_char                  // look up what character to draw based on the previous direction, puts in 'a' reg
-    ldy #$00
-    sta (screen_lsb),y
+    jsr path_lookup                // look up the coord behind the head from the path, stored in x/y
+    jsr draw_char
 
     // draw the tail
     sec
     lda length_lsb                 // subtract 1 from the length to find the tail space 
     sbc #$01
-    sta path_offset + 0
+    sta path_offset_lsb
     lda length_msb
     sbc #$00
-    sta path_offset + 1
-
+    sta path_offset_msb
     jsr path_lookup
     lda #$4c                        // tail character
     clc
-    adc tail_direction
-    ldy #$00
-    sta (screen_lsb),y    
-
+    adc tmp_direction               // add direction to get correct tail orientation char code
+    jsr draw_char
+    
     // remove the old tail (overwrite with a blank space)
     lda length_lsb
-    sta path_offset + 0
+    sta path_offset_lsb
     lda length_msb
-    sta path_offset + 1
-
+    sta path_offset_msb
+    lda #$00            // blank space character code
     jsr path_lookup
-    ldy #$00
-    lda #$00
-    sta (screen_lsb),y
+    jsr draw_char
 
     lda food_flag       
     and #%00000001      // check if bit 0 is set (there is no food so the snake must have eaten this loop)
@@ -485,6 +487,7 @@ draw:
     sta food_flag       // 
 
     // increment head_pointer
+    ldx #$00
 !:  clc
     lda head_path_pointer_lsb
     adc #$01
@@ -492,125 +495,39 @@ draw:
     lda head_path_pointer_msb
     adc #$00
     sta head_path_pointer_msb
-    cmp #[>path_lo] + $04                 // check if the path pointer should be wrapped back around.
+    cmp #[>path] + $04              // check if the path pointer should be wrapped back around.
     beq !+
     rts
-!:  lda #>path_lo
+!:  lda #>path
     sta head_path_pointer_msb
     rts
 
-    // looks up the screen location from the path_offset and places
-    // it in the screen_msb / lsb locations
-    // takes care of wrapping around when decrementing the head_pointer
-    // to stay within the valid memory space.
-    // restores the head_pointer afterwards.
-path_lookup:
-    lda head_path_pointer_msb        // backup head pointer to stack
+draw_char:      // draws the contents of the 'a' register at coordinates x/y
     pha
-    lda head_path_pointer_lsb
-    pha
-
-    sec                         // subtract the path_offset
-    sbc path_offset + 0
-    sta head_path_pointer_lsb
-    lda head_path_pointer_msb
-    sbc path_offset + 1
-    sta head_path_pointer_msb
-    cmp #>path_lo               // check if this falls out the bottom of the path space
-    bcs !+                      // and if so wrap around.
-    adc #$04
-    sta head_path_pointer_msb
-
-!:  ldy #$00                    // retrieve the screen location from the path
-    lda (head_path_pointer_lsb), y
-    sta screen_lsb
-    clc
-    lda head_path_pointer_msb
-    adc #$04
-    sta head_path_pointer_msb
-    lda (head_path_pointer_lsb), y
-    sta screen_msb
-    clc
-    ldy #$01
-    lda head_path_pointer_msb
-    adc #$04
-    sta head_path_pointer_msb
-    lda (head_path_pointer_lsb), y
-    sta tail_direction
-        
+    lda screen_table, x
+    sta tmp_lsb
+    lda screen_table + 25, x
+    sta tmp_msb
     pla
-    sta head_path_pointer_lsb        // restore head pointer from stack
-    pla
-    sta head_path_pointer_msb
+    sta (tmp_lsb), y
     rts
 
-spawn_food:              // spawns a food in a random location
-    lda food_flag        // load food flag
-    and #%00000001       // check if the zero bit is set
-    bne !skip+           // if so, there is already food, skip spawning.
-
-    //temporarily backup the snakes head row to the stack so the screen_row_address routine can be used again
-    lda head_row
+draw_char_colour:     // draws the character in  'a' in the colour set in tmp_colour at coordinates x/y
     pha
-    lda head_column
-    pha
-    
-rand_row:
-    lda $D41B           // get random 8 bit (0 - 255) number from SID
-    and #%00011111      // mask to 5 bit (0-31)
-    cmp #3              // lower bound
-    bmi rand_row
-    cmp #24             // upper bound  compare to see if is in range
-    bcs rand_row        // if the number is too large, try again
-    sta head_row
-rand_col:               // generate a random number between 0-39 for column
-    lda $D41B           // get random 8 bit (0 - 255) number from SID
-    and #$00111111      // mask to 6 bit (0 - 63)
-    cmp #03             // lower bound
-    bmi rand_col
-    cmp #37             // upper bound  compare to see if is in range
-    bcs rand_col        // if the number is too large, try again
-    sta head_column
-    jsr screen_address
-    ldy #$00           
-    lda (screen_lsb),y  // load screen position
-    cmp #$00            // see if it's a suitably blank location
-    bne rand_row        // if it's not blank try again!!
-
-    // store the successfully generated food coordinate in food_row/food_col
-    lda head_column
-    sta food_col
-    lda head_row
-    sta food_row
-
-!:  lda $D41B           // get random number from sid
-    and #%00000111
-    cmp #bg_colour      // check this isn't the same as the background colour
-    beq !-              // if it is, try again
-    ora #%00001000      // set multicolour speed_setting
-    sta food_colour
-    lda screen_msb      // backup msb to stack
-    pha
+    lda screen_table, x
+    sta tmp_lsb
+    lda screen_table + 25, x
+    sta tmp_msb
+    pla
+    sta (tmp_lsb), y
+    lda tmp_msb
     clc
-    adc #$d4            // to address color ram
-    sta screen_msb
-    lda food_colour
-    sta (screen_lsb),y
-    pla
-    sta screen_msb      // restore msb
-
-    lda #food_char      // food character
-    sta (screen_lsb),y  // spawn food
-    lda food_flag       // load food flag
-    ora #%00000001      // set bit 0 to 1 (there is a food on the board)
-    sta food_flag       
-    pla
-    sta head_column     // put the head column back
-    pla
-    sta head_row        // put the head row back
-!skip:
+    adc #$d4
+    sta tmp_msb
+    lda tmp_colour
+    sta (tmp_lsb), y
     rts
-  
+
 body_char:              // works out which body character needs to be drawn, puts it in the 'a' register.
     lda direction
     cmp prev_dir
@@ -630,7 +547,8 @@ body_char:              // works out which body character needs to be drawn, put
     clc
     adc prev_dir 
     rts
-!corner:  cmp #$00
+!corner:  
+    cmp #$00
     beq !up+
     cmp #$01
     beq !right+
@@ -663,11 +581,113 @@ body_char:              // works out which body character needs to be drawn, put
     lda prev_dir
     cmp #$01
     bne !+
-    lda #$45            // ne_corner character
+    lda #$45           // ne_corner character
     rts
 !:  lda #$44           // nw_corner character
     rts
+
 }
+    // looks up the path offset from the head_pointer by path_offset
+    // places the row/column in x/y registers
+    // takes care of wrapping around when decrementing the head_pointer
+    // to stay within the valid memory space.
+    // restores the head_pointer afterwards.
+    
+path_lookup:
+    pha                              // backup current 'a' reg contents to stack
+    lda head_path_pointer_msb        // backup head pointer to stack
+    pha
+    lda head_path_pointer_lsb
+    pha
+
+    sec                              // subtract the path_offset
+    sbc path_offset_lsb
+    sta head_path_pointer_lsb
+    lda head_path_pointer_msb
+    sbc path_offset_msb
+    sta head_path_pointer_msb
+    cmp #>path                      // check if this falls out the bottom of the path space
+    bcs !+                          // and if so wrap around.
+    adc #$04
+    sta head_path_pointer_msb
+
+!:  ldy #$00                        // retrieve the row/col coords from the path
+    lda (head_path_pointer_lsb), y
+    sta tmprow
+    clc
+    lda head_path_pointer_msb
+    adc #$04
+    sta head_path_pointer_msb
+    lda (head_path_pointer_lsb), y
+    sta tmpcol
+    clc
+    lda head_path_pointer_msb
+    adc #$04
+    sta head_path_pointer_msb
+    ldy #$01
+    lda (head_path_pointer_lsb), y
+    sta tmp_direction
+
+    ldx tmprow
+    ldy tmpcol
+        
+    pla
+    sta head_path_pointer_lsb        // restore head pointer from stack
+    pla
+    sta head_path_pointer_msb
+    pla                              // restore 'a' register
+    rts
+
+spawn_food:    {           // spawns a food in a random location
+    lda food_flag          // load food flag
+    and #%00000001         // check if the zero bit is set
+    beq rand_row           
+    rts                    // if so, there is already food, skip spawning.
+
+rand_row:
+    lda $D41B           // get random 8 bit (0 - 255) number from SID
+    and #%00011111      // mask to 5 bit (0-31)
+    cmp #00              // lower bound
+    bmi rand_row
+    cmp #24             // upper bound  compare to see if is in range
+    bcs rand_row        // if the number is too large, try again
+    sta food_row
+rand_col:               // generate a random number between 0-39 for column
+    lda $D41B           // get random 8 bit (0 - 255) number from SID
+    and #%00111111      // mask to 6 bit (0 - 63)
+    cmp #00             // lower bound
+    bmi rand_col
+    cmp #39             // upper bound  compare to see if is in range
+    bcs rand_col        // if the number is too large, try again
+    sta food_col
+
+    // check that this cell doesn't contain part of the snake (any character but a blank space)
+    ldx food_row
+    ldy food_col
+    lda screen_table, x
+    sta tmp_lsb
+    lda screen_table + 25, x
+    sta tmp_msb
+    lda (tmp_lsb), y
+    cmp #$00            // see if it's a suitably blank location
+    bne rand_row        // if it's not blank try again!!
+
+!:  lda $D41B           // get random number from sid
+    and #%00000111
+    cmp #bg_colour      // check this isn't the same as the background colour
+    beq !-              // if it is, try again
+    ora #%00001000      // set multicolour
+    sta food_colour
+    sta tmp_colour
+    lda #food_char
+    jsr draw.draw_char_colour
+
+    lda food_flag       // load food flag
+    ora #%00000001      // set bit 0 to 1 (there is a food on the board)
+    sta food_flag
+}
+}
+
 
 
 delay:{
@@ -750,19 +770,26 @@ head_row:           .byte 0      // y-coordinate, zero being top
 head_column:        .byte 0      // x-coordinate, zero being left
 length_lsb:         .byte 0      // snake length low .byte
 length_msb:         .byte 0      // snake length high .byte
-path_offset:        .word $0000  // 16 bit offset to be applied when looking up screen locations from the path.
-tail_direction:     .byte 0
+path_offset_lsb:    .byte 0      // 16 bit offset to be applied when looking up screen locations from the path.
+path_offset_msb:    .byte 0
+tmp_direction:      .byte 0
+tmp_colour:         .byte 0
 snake_colour:       .byte 0
 food_colour:        .byte 0
 speed_setting:      .byte 0
 mode:               .byte 0
 cycle_lsb:          .byte 0
 cycle_msb:          .byte 0
-next_cycle:         .word $0000
+next_cycle_lsb:     .byte 0
+next_cycle_msb:     .byte 0
 food_row:           .byte 0
 food_col:           .byte 0
-food_cycle:         .word $0000
-tail_cycle:         .word $0000
+food_cycle_lsb:     .byte 0
+food_cycle_msb:     .byte 0
+tail_cycle_lsb:     .byte 0
+tail_cycle_msb:     .byte 0
+tmprow:             .byte 0
+tmpcol:             .byte 0
 
 screen_table:         .lohifill 25, screen + [i * 40]     // table of the memory locations for the first column in each row
 column_walls_table:   .fill [width / 2], i * [[height / 2] -1]
@@ -772,9 +799,10 @@ cycle_table:          .lohifill 25, cycle + [i*40]
 cycle_msb_table:      .fill 25, $04 + >[cycle + [i*40]]
 
 .align $100
-* = * "path data"       // locations for 'path' (history of previous screen locations)
-path_lo:  .fill 1024, 0     // $0c00 - $0FFF screen location low bytes
-path_hi:  .fill 1024, 0     // $1000 - $13FF screen location high bytes
+* = * "path data"       // locations for 'path' (history of previous coordinates
+path:
+path_row:  .fill 1024, 0     // $0c00 - $0FFF rows
+path_col:  .fill 1024, 0     // $1000 - $13FF columns
 path_dir: .fill 1024, 0     // $1400 - $17FF directions (needed to draw correct tail)
 
 // a wall is a 1, a passageway is 0
