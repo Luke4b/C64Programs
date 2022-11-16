@@ -20,8 +20,6 @@ BasicUpstart2(main)
 
 .label the_row = head_row           //reused these variables during mazegen
 .label the_column = head_column    
-.label tmprow = length_lsb
-.label tmpcol = length_msb
 .label colour = snake_colour
 .label adjacency_length = tmp_direction
 .label temp = prev_dir
@@ -141,6 +139,18 @@ game: {
 
 
 loop:
+    ldx #$00
+    lda head_path_pointer_msb
+    jsr PrintHexValue
+    lda head_path_pointer_lsb
+    jsr PrintHexValue
+    inx
+    lda length_msb
+    jsr PrintHexValue
+    lda length_lsb
+    jsr PrintHexValue
+
+
     lda mode                // check if mode is set to auto
     beq !+
     jsr auto_mode           // use the hamiltian path to fake keyboard input
@@ -447,48 +457,49 @@ draw:   {
     jsr path_lookup                // look up the coord behind the head from the path, stored in x/y
     jsr draw_char
 
-//     // draw the tail
-//     sec
-//     lda length_lsb                 // subtract 1 from the length to find the tail space 
-//     sbc #$01
-//     sta path_offset_lsb
-//     lda length_msb
-//     sbc #$00
-//     sta path_offset_msb
-//     lda #$4c                        // tail character
-//     clc
-//     adc tmp_direction               // add direction to get correct tail orientation char code
-//     jsr path_lookup
-//     jsr draw_char
+    // draw the tail
+    sec
+    lda length_lsb                 // subtract 1 from the length to find the tail space 
+    sbc #$01
+    sta path_offset_lsb
+    lda length_msb
+    sbc #$00
+    sta path_offset_msb
+    jsr path_lookup
+    lda #$4c                        // tail character
+    clc
+    adc tmp_direction               // add direction to get correct tail orientation char code
+    jsr draw_char
     
-//     // remove the old tail (overwrite with a blank space)
-//     lda length_lsb
-//     sta path_offset_lsb
-//     lda length_msb
-//     sta path_offset_msb
-//     lda #$00            // blank space character code
-//     jsr path_lookup
-//     jsr draw_char
+    // remove the old tail (overwrite with a blank space)
+    lda length_lsb
+    sta path_offset_lsb
+    lda length_msb
+    sta path_offset_msb
+    lda #$00            // blank space character code
+    jsr path_lookup
+    jsr draw_char
 
-//     lda food_flag       
-//     and #%00000001      // check if bit 0 is set (there is no food so the snake must have eaten this loop)
-//     bne !+              // 
-//     ora #%00000010      // if this is true then set the 1 bit to indicate.
-//     sta food_flag       // 
+    lda food_flag       
+    and #%00000001      // check if bit 0 is set (there is no food so the snake must have eaten this loop)
+    bne !+              // 
+    ora #%00000010      // if this is true then set the 1 bit to indicate.
+    sta food_flag       // 
 
-//     // increment head_pointer
-// !:  clc
-//     lda head_path_pointer_lsb
-//     adc #$01
-//     sta head_path_pointer_lsb
-//     lda head_path_pointer_msb
-//     adc #$00
-//     sta head_path_pointer_msb
-//     cmp #[>path + $04]              // check if the path pointer should be wrapped back around.
-//     beq !+
-//     rts
-// !:  lda #>path
-//     sta head_path_pointer_msb
+    // increment head_pointer
+    ldx #$00
+!:  clc
+    lda head_path_pointer_lsb
+    adc #$01
+    sta head_path_pointer_lsb
+    lda head_path_pointer_msb
+    adc #$00
+    sta head_path_pointer_msb
+    cmp #[>path] + $04              // check if the path pointer should be wrapped back around.
+    beq !+
+    rts
+!:  lda #>path
+    sta head_path_pointer_msb
     rts
 
 draw_char:      // draws the contents of the 'a' register at coordinates x/y
@@ -636,17 +647,17 @@ spawn_food:    {           // spawns a food in a random location
 rand_row:
     lda $D41B           // get random 8 bit (0 - 255) number from SID
     and #%00011111      // mask to 5 bit (0-31)
-    cmp #3              // lower bound
+    cmp #00              // lower bound
     bmi rand_row
     cmp #24             // upper bound  compare to see if is in range
     bcs rand_row        // if the number is too large, try again
     sta food_row
 rand_col:               // generate a random number between 0-39 for column
     lda $D41B           // get random 8 bit (0 - 255) number from SID
-    and #$00111111      // mask to 6 bit (0 - 63)
-    cmp #03             // lower bound
+    and #%00111111      // mask to 6 bit (0 - 63)
+    cmp #00             // lower bound
     bmi rand_col
-    cmp #37             // upper bound  compare to see if is in range
+    cmp #39             // upper bound  compare to see if is in range
     bcs rand_col        // if the number is too large, try again
     sta food_col
 
@@ -777,6 +788,8 @@ food_cycle_lsb:     .byte 0
 food_cycle_msb:     .byte 0
 tail_cycle_lsb:     .byte 0
 tail_cycle_msb:     .byte 0
+tmprow:             .byte 0
+tmpcol:             .byte 0
 
 screen_table:         .lohifill 25, screen + [i * 40]     // table of the memory locations for the first column in each row
 column_walls_table:   .fill [width / 2], i * [[height / 2] -1]
