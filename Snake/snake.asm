@@ -14,8 +14,8 @@ BasicUpstart2(main)
 .label food_char = $3f    // character to be used for food.
 
 .label random = $D41B       // address of random numbers from SID
-.label width = 40          // maximum 40 must be even number
-.label height = 24         // maximum 24 must be even number
+.label width = 8          // maximum 40 must be even number
+.label height = 8         // maximum 24 must be even number
 .label screen = $0400
 
 .label the_row = head_row           //reused these variables during mazegen
@@ -89,6 +89,7 @@ await_input:
     jmp !-
 auto:   
         jsr maze_gen        // generate new hamiltonian path
+
         lda #$01            
         sta mode            // set auto mode flag
         lda #$03            // set to super speed
@@ -123,9 +124,9 @@ game: {
     sta last_key
 
     // starting location in approximately screen centre
-    lda #12             // $0C
+    lda #[height / 2]
     sta head_row
-    lda #19             // $13
+    lda #[width /2]
     sta head_column
 
     jsr clear_screen        // clear screen
@@ -137,33 +138,96 @@ game: {
     dex
     bpl !-
 
+        //print stuff to debug
+.var i=0
+.for (;i<6;) {
+        ldx #[40 * i]
+        ldy #00
+    !:  lda cycle + [i * 40], y
+        jsr PrintHexValue
+        iny
+        inx
+        cpy #8
+        bne !-
+        .eval i++
+}
+        //print stuff to debug
+.var j=0
+.for (;j<2;) {
+        ldx #[40 * j]
+        ldy #00
+    !:  lda cycle + [6 * 40] + [40 * j], y
+        jsr PrintHexValue2
+        iny
+        inx
+        cpy #8
+        bne !-
+        .eval j++
+}
+
 
 loop:
-    ldx #$00
-    lda head_path_pointer_msb
-    jsr PrintHexValue
-    lda head_path_pointer_lsb
-    jsr PrintHexValue
-    inx
-    lda length_msb
-    jsr PrintHexValue
-    lda length_lsb
-    jsr PrintHexValue
 
-
-    lda mode                // check if mode is set to auto
-    beq !+
+//    lda mode                // check if mode is set to auto
+//    beq !+
     jsr auto_mode           // use the hamiltian path to fake keyboard input
-    jmp !++
-!:  jsr read_keyb           // read last keypress, ignore if invalid
+
+print_stuff:{           // PRINT STUFF FOR DIAGNOSTIC PURPOSE
+
+    ldx #25
+    lda cycle_lsb
+    jsr PrintHexValue2
+    
+    // distances
+
+    ldx #30
+    lda up_dist_lsb
+    jsr PrintHexValue
+
+    ldx #[30 - 3 + [2*40]]
+    lda left_dist_lsb
+    jsr PrintHexValue
+
+    ldx #[30 + [2*40]]
+    lda comp_lsb
+    jsr PrintHexValue
+
+    ldx #[30 + 3 + [2*40]]
+    lda right_dist_lsb
+    jsr PrintHexValue
+
+    ldx #[30 + [4*40]]
+    lda down_dist_lsb
+    jsr PrintHexValue
+
+    //targets
+
+    ldx #[42 - 6]
+    lda tail_cycle_lsb
+    jsr PrintHexValue
+
+    ldx #[42 - 6 + [4*40]]
+    lda food_cycle_lsb
+    jsr PrintHexValue
+}
+
+WAIT_KEY:
+    jsr $FFE4         // Calling KERNAL GETIN 
+    beq WAIT_KEY      // If Z, no key was pressed, so try again.
+
+
+
+//    jmp !++
+//!:  jsr read_keyb           // read last keypress, ignore if invalid
 !:  jsr step                // set direction, update head coordinate, reset if AOB
     jsr collision_check     // check if snake has collided with itself or food
     jsr draw                // draw the snake
     jsr spawn_food          // check if there is food, if not spawn one, if food has been eaten increment length
-    jsr delay               // run the delay loop according to speed setting
+    jsr delay               // run the> delay loop according to speed setting
     jmp loop
 
-auto_mode: {
+
+auto_mode: {    // calculates which cell go to next and fakes the correct keyboard input.
     //load the current head cycle number into cycle_lsb and cycle_msb
     ldx head_row
     ldy head_column
@@ -182,7 +246,7 @@ auto_mode: {
     lda tmp_cycle_lsb
     sta food_cycle_lsb
 
-    //load the current tail cycle number into food_cycle
+    //load the current tail cycle number into tail_cycle
     ldx tail_row
     ldy tail_col
     jsr lookup_cycle
@@ -190,56 +254,6 @@ auto_mode: {
     sta tail_cycle_msb
     lda tmp_cycle_lsb
     sta tail_cycle_lsb
-
-    /*reset the comparison output bytes, these store a bit per direction
-      in the format:        up v  v left
-                          %00000000
-                           down ^^ right     */
-    lda #$00
-    sta head_comparison
-    sta food_comparison
-    sta tail_comparison
-
-    //up - dex
-    ldx head_row
-    ldy head_column
-    dex
-    jsr lookup_cycle
-    lda tmp_cycle_msb
-    sta up_cycle_msb
-    lda tmp_cycle_lsb
-    sta up_cycle_lsb
-    jsr compare
-
-    //down - inx
-    inx
-    inx
-    jsr lookup_cycle
-    lda tmp_cycle_msb
-    sta down_cycle_msb
-    lda tmp_cycle_lsb
-    sta down_cycle_lsb
-    jsr compare
-
-    //right - iny
-    dex
-    iny
-    jsr lookup_cycle
-    lda tmp_cycle_msb
-    sta right_cycle_msb
-    lda tmp_cycle_lsb
-    sta right_cycle_lsb
-    jsr compare
-
-    //left - dey
-    dey
-    dey
-    jsr lookup_cycle
-    lda tmp_cycle_msb
-    sta left_cycle_msb
-    lda tmp_cycle_lsb
-    sta left_cycle_lsb
-    jsr compare
 
     //determine if the head is behind or ahead of the food.
     sec
@@ -249,156 +263,100 @@ auto_mode: {
     sbc food_cycle_msb
     bcs food_behind_head              // carry set if head in front of food.
     
-    // head behind food.  shortcut to:    head < largest_number < food
-    lda head_comparison
-    and food_comparison
-    clc                     //clear carry
-    lsr                     //rotate bit 0 (left) into carry
-    bcs !left+                  //if carry set then left was a valid option.
-    clc
-    lsr                     //rotate bit 1 (right) info carry
-    bcs !right+                 //if carry set then right was a valid option.
-    clc
-    lsr                     //rotate bit 2 (down) into carry
-    bcs !down+                  //if carry set then down was a valid option.
-
-//up                        must be one valid option (next number in path) so must be up.
-    beq !up+
-
-!left:                      //have ror'd once so %00001111 C0   is now %00000111 C1
-    bne !+              
-    jmp !left+              //if the number is now zero, left was the only option.
- !:   and #%00000001        //and with what is now bit 0 (right)
-
-
-!right:  
-    beq !right+             //if the number is now zero, right was the only option.
-    pha
-    and #%00000001          //and with what is now bit 0 (down)
-    beq upvsright           //if the number is now zero, up may still be an option
-    sec                     //down was also an option
-    lda right_cycle_lsb
-    sbc down_cycle_lsb
-    lda right_cycle_msb
-    sbc down_cycle_msb
-    bcs upvsright           //right > down
-                            //down > right
-    pla
-    and #%00000010          //and with what is now bit 1 (up)
-    jmp !down+              //jump to existing down vs up routine
-
-upvsright:                  //right > down
-    pla
-    and #%00000010          //and with what is now bit 1 (up)
-    beq !right+             //up was not also an option
-    sec                     //up was also an option
-    lda right_cycle_lsb
-    sbc up_cycle_lsb
-    lda right_cycle_msb
-    sbc up_cycle_msb
-    bcs !right+             //right > up
-    jmp !up+                //up > right
-
-!down:  
-    beq !down+              //if the number is now zero, down was the only option.
-    sec                     //if the number is non-zero, up was also an option (left and right weren't)
-    lda down_cycle_lsb
-    sbc up_cycle_lsb
-    lda down_cycle_msb
-    sbc up_cycle_msb
-    bcs !down+              //if down > up
-    jmp !up+
-
-food_behind_head:      // shortcut to:   number_closest_to_tail < tail
-
-rts
-
-compare:
-    sec
-    sbc cycle_lsb
-    lda tmp_cycle_msb
-    sbc cycle_msb
-    rol head_comparison         // rotate the carry bit into head_comparison (1 means > head)
-    sec
+    // head behind food.  shortcut to:    closest number behind food
     lda food_cycle_lsb
-    sbc tmp_cycle_lsb
+    sta comp_lsb
     lda food_cycle_msb
-    sbc tmp_cycle_msb
-    rol food_comparison         // rotate the carry bit into food_comparison (1 means < food)
-    sec
+    sta comp_msb
+    jmp !+
+   
+
+food_behind_head:      // shortcut to:    closest number behind tail
     lda tail_cycle_lsb
-    sbc tmp_cycle_lsb
+    sta comp_lsb
     lda tail_cycle_msb
-    sbc tmp_cycle_msb
-    rol tail_comparison         // rotate the carry bit into tail_comparison (1 means < tail)
-    rts
+    sta comp_msb
+
+!:             
+//find cycle values for each direction
+    jsr get_up
+    jsr get_right
+    jsr get_down
+    jsr get_left
+
+//find smallest distance to target
+    sec
+    lda up_dist_lsb
+    sbc down_dist_lsb
+    lda up_dist_msb
+    sbc up_dist_msb
+    bcs !+
+    // up < down
+    lda up_dist_lsb
+    sta tmp_dist_1_lsb
+    lda up_dist_msb
+    sta tmp_dist_1_msb
+    jmp !++
+!:  // down < up
+    lda down_dist_lsb
+    sta tmp_dist_1_lsb
+    lda down_dist_msb
+    sta tmp_dist_1_msb
+
+!:  sec
+    lda left_dist_lsb
+    sbc right_dist_lsb
+    lda left_dist_msb
+    sbc right_dist_msb
+    bcs !+
+    lda left_dist_lsb   // left < right
+    sta tmp_dist_2_lsb
+    lda left_dist_msb
+    sta tmp_dist_2_msb
+    jmp !++
+!:  lda right_dist_lsb  // right < left
+    sta tmp_dist_2_lsb
+    lda right_dist_msb
+    sta tmp_dist_2_msb
+
+!:  sec
+    lda tmp_dist_1_lsb
+    sbc tmp_dist_2_lsb
+    lda tmp_dist_1_msb
+    sbc tmp_dist_2_msb
+    bcs !+
+    lda tmp_dist_1_lsb    // tmp_dist_1 < tmp_dist_2
+    sta tmp_cycle_lsb
+    lda tmp_dist_1_msb
+    sta tmp_cycle_msb
+    jmp !++
+!:  lda tmp_dist_2_lsb  // tmp_dist_2 < tmp_dist_1
+    sta tmp_cycle_lsb
+    lda tmp_dist_2_msb
+    sta tmp_cycle_msb
+!:
 
 
-// if food_cycle > head_cycle, snake is behind the food.
-//      choose largest shortcut that is > head
-// else food_cycle < head_cycle, snake is ahead of the food. 
-//      choose largest shortcut that is < tail
-
-
-/*
-    //increment 
-    clc
-    lda cycle_lsb
-    adc #$01
-    sta cycle_lsb
-    lda cycle_msb
-    adc #$00
-    sta cycle_msb
-
-    //check hasn't reached 960 ($03c0) where the number wraps
-    cmp #$03
-    bne !+
-    lda cycle_lsb
-    cmp #$c0
-    bne !+
-    // if it has, reset to zero
-    lda #$00
-    sta cycle_lsb
-    sta cycle_msb
-!:  ldy head_column
-    ldx head_row
-    // check left (dey)
-    dey
-    jsr lookup_cycle
-    lda tmp_cycle_lsb
-    cmp cycle_lsb
-    bne !+
+find_direction:         // find which of the directions had this distance to the target.
     lda tmp_cycle_msb
-    cmp cycle_msb
-    beq !left+
-
-!:  // check right (iny)
-    iny
-    iny
-    jsr lookup_cycle
-    lda tmp_cycle_lsb
-    cmp cycle_lsb
+    cmp up_dist_msb
     bne !+
-    lda tmp_cycle_msb
-    cmp cycle_msb
-    beq !right+
-
-!:  // check above (dex)
-    dey
-    dex
-    jsr lookup_cycle
     lda tmp_cycle_lsb
-    cmp cycle_lsb
-    bne !+
-    lda tmp_cycle_msb
-    cmp cycle_msb
+    cmp up_dist_lsb
     beq !up+
-
-!:  // check below unecissary because it's the only option left
-    jmp !down+
-
-*/
-
+!:  lda tmp_cycle_msb
+    cmp down_dist_msb
+    bne !+
+    lda tmp_cycle_lsb
+    cmp down_dist_lsb
+    beq !down+
+!:  lda tmp_cycle_msb
+    cmp right_dist_msb
+    bne !+
+    lda tmp_cycle_lsb
+    cmp right_dist_lsb
+    beq !right+
+!:  jmp !left+              //exhausted other options so must be left.
 
 !up:
     lda #$09
@@ -417,6 +375,109 @@ compare:
     sta last_key
     jmp check_for_reset
 
+get_down:
+    ldx head_row
+    ldy head_column
+    inx
+    jsr lookup_cycle
+    lda tmp_cycle_lsb
+    sta down_cycle_lsb
+    lda tmp_cycle_msb
+    sta down_cycle_msb
+    jsr dist_to_target
+    lda tmp_cycle_msb
+    sta down_dist_msb
+    lda tmp_cycle_lsb
+    sta down_dist_lsb
+    rts
+get_up:
+    ldx head_row
+    ldy head_column
+    dex
+    jsr lookup_cycle
+    lda tmp_cycle_lsb
+    sta up_cycle_lsb
+    lda tmp_cycle_msb
+    sta up_cycle_msb
+    jsr dist_to_target
+    lda tmp_cycle_msb
+    sta up_dist_msb
+    lda tmp_cycle_lsb
+    sta up_dist_lsb
+    rts
+get_right:
+    ldx head_row
+    ldy head_column
+    iny
+    jsr lookup_cycle
+    lda tmp_cycle_lsb
+    sta right_cycle_lsb
+    lda tmp_cycle_msb
+    sta right_cycle_msb
+    jsr dist_to_target
+    lda tmp_cycle_msb
+    sta right_dist_msb
+    lda tmp_cycle_lsb
+    sta right_dist_lsb
+    rts
+get_left:
+    ldx head_row
+    ldy head_column
+    dey
+    jsr lookup_cycle
+    lda tmp_cycle_lsb
+    sta left_cycle_lsb
+    lda tmp_cycle_msb
+    sta left_cycle_msb
+    jsr dist_to_target
+    lda tmp_cycle_msb
+    sta left_dist_msb
+    lda tmp_cycle_lsb
+    sta left_dist_lsb
+    rts
+
+dist_to_target:                   // looks up the distance between tmp_cycl_lsb/msb and the target cell at comp_lsb/msb
+    lda tmp_cycle_msb
+    cmp comp_msb
+    bcc cell_behind_target
+    bne cell_ahead_of_target
+    lda tmp_cycle_lsb
+    cmp comp_lsb
+    bcc cell_behind_target
+    beq cell_behind_target
+    bne cell_ahead_of_target
+
+cell_ahead_of_target:
+    sec                           // cell is ahead of target
+    lda #<[[height * width] -1]   // subtract cell cycle number from largest cell number and then add target.
+    sbc tmp_cycle_lsb
+    sta tmp_cycle_lsb
+    lda #>[[height * width] -1]
+    sbc tmp_cycle_msb
+    sta tmp_cycle_msb
+
+    clc
+    lda tmp_cycle_lsb
+    adc comp_lsb
+    sta tmp_cycle_lsb
+    lda tmp_cycle_msb
+    adc comp_msb
+    sta tmp_cycle_msb
+    rts
+
+cell_behind_target:  
+    sec                           // cell is behind target
+    lda comp_lsb                  // subtract cell cycle number from targets.
+    sbc tmp_cycle_lsb
+    sta tmp_cycle_lsb
+    lda comp_msb
+    sbc tmp_cycle_msb
+    sta tmp_cycle_msb
+    rts
+
+
+
+
 lookup_cycle:                     // looks up cycle lsb/msb indexed by x and y. stored in tmp_cycle_lsb/msb
     lda cycle_table, x
     sta tmp_lsb
@@ -434,7 +495,7 @@ check_for_reset:
     lda $cb            // check if a key has been pressed (resets)
     cmp #$40
     beq !+
-    jmp step.reset
+    //jmp step.reset
 !:  rts
 }
 
@@ -804,7 +865,7 @@ rand_row:
     and #%00011111      // mask to 5 bit (0-31)
     cmp #00              // lower bound
     bmi rand_row
-    cmp #24             // upper bound  compare to see if is in range
+    cmp #height             // upper bound  compare to see if is in range
     bcs rand_row        // if the number is too large, try again
     sta food_row
 rand_col:               // generate a random number between 0-39 for column
@@ -812,7 +873,7 @@ rand_col:               // generate a random number between 0-39 for column
     and #%00111111      // mask to 6 bit (0 - 63)
     cmp #00             // lower bound
     bmi rand_col
-    cmp #39             // upper bound  compare to see if is in range
+    cmp #width             // upper bound  compare to see if is in range
     bcs rand_col        // if the number is too large, try again
     sta food_col
 
@@ -880,7 +941,7 @@ high_speed:
     ldy #$20
     jmp delay_loop
 super_speed:
-    ldy #$10
+    ldy #$25
     jmp delay_loop
 }
 
@@ -911,11 +972,28 @@ PrintHexNybble: cmp #$0a
 PHN_IsDigit:    ora #$30
                 bne PHN_Print
 PHN_IsLetter:   sbc #$09
-PHN_Print:      sta $0400 + [24*40],x
+PHN_Print:      sta $0400 + [17*40],x
                 inx
                 rts
 }
 
+PrintHexValue2:{ pha
+                lsr
+                lsr
+                lsr
+                lsr
+                jsr PrintHexNybble
+                pla
+                and #$0f
+PrintHexNybble: cmp #$0a
+                bcs PHN_IsLetter
+PHN_IsDigit:    ora #$30
+                bne PHN_Print
+PHN_IsLetter:   sbc #$09
+PHN_Print:      sta $0400 + [23*40],x
+                inx
+                rts
+}
 
 last_key:           .byte 0      // last key pressed
 food_flag:          .byte 0      // 1 if there is food currently on the board otherwise 0
@@ -943,21 +1021,38 @@ tail_row:           .byte 0
 tail_col:           .byte 0
 food_cycle_lsb:     .byte 0
 food_cycle_msb:     .byte 0
-tail_cycle_lsb:     .byte 0
-tail_cycle_msb:     .byte 0
 tmprow:             .byte 0
 tmpcol:             .byte 0
+up_dist_lsb:        .byte 0
+right_dist_lsb:     .byte 0
+down_dist_lsb:      .byte 0
+left_dist_lsb:      .byte 0
+up_dist_msb:        .byte 0
+right_dist_msb:     .byte 0
+down_dist_msb:      .byte 0
+left_dist_msb:      .byte 0
+opt_a_lsb:          .byte 0
+opt_b_lsb:          .byte 0
+opt_c_lsb:          .byte 0
+opt_a_msb:          .byte 0
+opt_b_msb:          .byte 0
+opt_c_msb:          .byte 0
+comp_lsb:           .byte 0
+comp_msb:           .byte 0
 up_cycle_lsb:       .byte 0
-up_cycle_msb:       .byte 0
 right_cycle_lsb:    .byte 0
-right_cycle_msb:    .byte 0
 down_cycle_lsb:     .byte 0
-down_cycle_msb:     .byte 0
 left_cycle_lsb:     .byte 0
+up_cycle_msb:       .byte 0
+right_cycle_msb:    .byte 0
+down_cycle_msb:     .byte 0
 left_cycle_msb:     .byte 0
-head_comparison:    .byte 0
-food_comparison:    .byte 0
-tail_comparison:    .byte 0
+tail_cycle_lsb:     .byte 0
+tail_cycle_msb:     .byte 0
+tmp_dist_1_lsb:     .byte 0
+tmp_dist_1_msb:     .byte 0
+tmp_dist_2_lsb:     .byte 0
+tmp_dist_2_msb:     .byte 0
 
 screen_table:         .lohifill 25, screen + [i * 40]     // table of the memory locations for the first column in each row
 column_walls_table:   .fill [width / 2], i * [[height / 2] -1]
