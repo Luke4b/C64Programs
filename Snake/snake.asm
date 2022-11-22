@@ -15,7 +15,7 @@ BasicUpstart2(main)
 
 .label random = $D41B       // address of random numbers from SID
 .label width = 8          // maximum 40 must be even number
-.label height = 8         // maximum 24 must be even number
+.label height = 8        // maximum 24 must be even number
 .label screen = $0400
 
 .label the_row = head_row           //reused these variables during mazegen
@@ -255,27 +255,38 @@ auto_mode: {    // calculates which cell go to next and fakes the correct keyboa
     lda tmp_cycle_lsb
     sta tail_cycle_lsb
 
+    //set the target (comp_lsb/msb)
     //determine if the head is behind or ahead of the food.
     sec
     lda cycle_lsb
     sbc food_cycle_lsb
     lda cycle_msb
     sbc food_cycle_msb
-    bcs food_behind_head              // carry set if head in front of food.
+    bcs target_tail              // carry set if head in front of food.
     
     // head behind food.  shortcut to:    closest number behind food
+target_food:
     lda food_cycle_lsb
     sta comp_lsb
     lda food_cycle_msb
     sta comp_msb
-    jmp !+
-   
+    jmp !++
 
-food_behind_head:      // shortcut to:    closest number behind tail
+target_tail:     
+    sec                     //check to see if tail is already in front of the food.
+    lda tail_cycle_lsb
+    sbc food_cycle_lsb
+    lda tail_cycle_msb
+    sbc food_cycle_msb
+    bcs !+
+    // food > tail
     lda tail_cycle_lsb
     sta comp_lsb
     lda tail_cycle_msb
     sta comp_msb
+    jmp !++
+!:  // tail > food
+    jmp target_food
 
 !:             
 //find cycle values for each direction
@@ -377,6 +388,8 @@ find_direction:         // find which of the directions had this distance to the
 
 get_down:
     ldx head_row
+    cpx #[height -1]
+    beq !AOB+
     ldy head_column
     inx
     jsr lookup_cycle
@@ -390,8 +403,15 @@ get_down:
     lda tmp_cycle_lsb
     sta down_dist_lsb
     rts
+!AOB:    
+    lda #$FF
+    sta down_dist_lsb
+    sta down_dist_msb
+    rts
+
 get_up:
     ldx head_row
+    beq !AOB+
     ldy head_column
     dex
     jsr lookup_cycle
@@ -405,9 +425,17 @@ get_up:
     lda tmp_cycle_lsb
     sta up_dist_lsb
     rts
+!AOB:
+    lda #$FF
+    sta up_dist_lsb
+    sta up_dist_msb
+    rts
+
 get_right:
     ldx head_row
     ldy head_column
+    cpy #[width -1]
+    beq !AOB+
     iny
     jsr lookup_cycle
     lda tmp_cycle_lsb
@@ -420,9 +448,16 @@ get_right:
     lda tmp_cycle_lsb
     sta right_dist_lsb
     rts
+!AOB:
+    lda #$FF
+    sta right_dist_lsb
+    sta right_dist_msb
+    rts
+
 get_left:
     ldx head_row
     ldy head_column
+    beq !AOB+
     dey
     jsr lookup_cycle
     lda tmp_cycle_lsb
@@ -434,6 +469,11 @@ get_left:
     sta left_dist_msb
     lda tmp_cycle_lsb
     sta left_dist_lsb
+    rts
+!AOB:
+    lda #$FF
+    sta left_dist_lsb
+    sta left_dist_msb
     rts
 
 dist_to_target:                   // looks up the distance between tmp_cycl_lsb/msb and the target cell at comp_lsb/msb
