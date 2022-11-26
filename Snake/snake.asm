@@ -188,10 +188,6 @@ print_stuff:{           // PRINT STUFF FOR DIAGNOSTIC PURPOSE
     lda left_dist_lsb
     jsr PrintHexValue
 
-    ldx #[30 + [2*40]]
-    lda comp_lsb
-    jsr PrintHexValue
-
     ldx #[30 + 3 + [2*40]]
     lda right_dist_lsb
     jsr PrintHexValue
@@ -254,41 +250,7 @@ auto_mode: {    // calculates which cell go to next and fakes the correct keyboa
     sta tail_cycle_msb
     lda tmp_cycle_lsb
     sta tail_cycle_lsb
-
-    //set the target (comp_lsb/msb)
-    //determine if the head is behind or ahead of the food.
-    sec
-    lda cycle_lsb
-    sbc food_cycle_lsb
-    lda cycle_msb
-    sbc food_cycle_msb
-    bcs target_tail              // carry set if head in front of food.
-    
-    // head behind food.  shortcut to:    closest number behind food
-target_food:
-    lda food_cycle_lsb
-    sta comp_lsb
-    lda food_cycle_msb
-    sta comp_msb
-    jmp !++
-
-target_tail:     
-    sec                     //check to see if tail is already in front of the food.
-    lda tail_cycle_lsb
-    sbc food_cycle_lsb
-    lda tail_cycle_msb
-    sbc food_cycle_msb
-    bcs !+
-    // food > tail
-    lda tail_cycle_lsb
-    sta comp_lsb
-    lda tail_cycle_msb
-    sta comp_msb
-    jmp !++
-!:  // tail > food
-    jmp target_food
-
-!:             
+ 
 //find cycle values for each direction
     jsr get_up
     jsr get_right
@@ -389,7 +351,7 @@ find_direction:         // find which of the directions had this distance to the
 get_down:
     ldx head_row
     cpx #[height -1]
-    beq !AOB+
+    beq !no_cut+
     ldy head_column
     inx
     jsr lookup_cycle
@@ -397,13 +359,16 @@ get_down:
     sta down_cycle_lsb
     lda tmp_cycle_msb
     sta down_cycle_msb
+    jsr snake_check
+    lda safe
+    beq !no_cut+
     jsr dist_to_target
     lda tmp_cycle_msb
     sta down_dist_msb
     lda tmp_cycle_lsb
     sta down_dist_lsb
     rts
-!AOB:    
+!no_cut:    
     lda #$FF
     sta down_dist_lsb
     sta down_dist_msb
@@ -411,7 +376,7 @@ get_down:
 
 get_up:
     ldx head_row
-    beq !AOB+
+    beq !no_cut+
     ldy head_column
     dex
     jsr lookup_cycle
@@ -419,13 +384,16 @@ get_up:
     sta up_cycle_lsb
     lda tmp_cycle_msb
     sta up_cycle_msb
+    jsr snake_check
+    lda safe
+    beq !no_cut+
     jsr dist_to_target
     lda tmp_cycle_msb
     sta up_dist_msb
     lda tmp_cycle_lsb
     sta up_dist_lsb
     rts
-!AOB:
+!no_cut:
     lda #$FF
     sta up_dist_lsb
     sta up_dist_msb
@@ -435,20 +403,23 @@ get_right:
     ldx head_row
     ldy head_column
     cpy #[width -1]
-    beq !AOB+
+    beq !no_cut+
     iny
     jsr lookup_cycle
     lda tmp_cycle_lsb
     sta right_cycle_lsb
     lda tmp_cycle_msb
     sta right_cycle_msb
+    jsr snake_check
+    lda safe
+    beq !no_cut+
     jsr dist_to_target
     lda tmp_cycle_msb
     sta right_dist_msb
     lda tmp_cycle_lsb
     sta right_dist_lsb
     rts
-!AOB:
+!no_cut:
     lda #$FF
     sta right_dist_lsb
     sta right_dist_msb
@@ -457,32 +428,74 @@ get_right:
 get_left:
     ldx head_row
     ldy head_column
-    beq !AOB+
+    beq !no_cut+
     dey
     jsr lookup_cycle
     lda tmp_cycle_lsb
     sta left_cycle_lsb
     lda tmp_cycle_msb
     sta left_cycle_msb
+    jsr snake_check
+    lda safe
+    beq !no_cut+
     jsr dist_to_target
     lda tmp_cycle_msb
     sta left_dist_msb
     lda tmp_cycle_lsb
     sta left_dist_lsb
     rts
-!AOB:
+!no_cut:
     lda #$FF
     sta left_dist_lsb
     sta left_dist_msb
     rts
 
-dist_to_target:                   // looks up the distance between tmp_cycl_lsb/msb and the target cell at comp_lsb/msb
+snake_check:
+/*  check if this cell option is unsafe (cells that could contain the snake)
+    save safety status in 'safe' 1 = safe, 0 = unsafe
+    if the tail > head, safe options are >head AND <tail
+    if the head > tail, safe options are >head OR  <tail
+*/
+    sec                 // check if tail > option cell
+    lda tail_cycle_lsb
+    sbc tmp_cycle_lsb
+    lda tail_cycle_msb
+    sbc tmp_cycle_msb
+    rol                 // rotate the carry into bit 0.
+    and #%00000001      // get rid of the rest
+    sta safe_tail
+
+    sec                 // check if the option cell > head
+    lda tmp_cycle_lsb
+    sbc cycle_lsb
     lda tmp_cycle_msb
-    cmp comp_msb
+    sbc cycle_msb
+    rol
+    and #%00000001
+    sta safe_head
+
+    sec                 // check if the head > tail
+    lda cycle_lsb 
+    sbc tail_cycle_lsb 
+    lda cycle_msb
+    sbc tail_cycle_msb
+    bcs !+               
+    lda safe_tail        // tail > head
+    and safe_head
+    sta safe
+    rts
+!:  lda safe_tail        //head > tail
+    ora safe_head
+    sta safe
+    rts
+
+dist_to_target:                   // looks up the distance between tmp_cycle_lsb/msb and the food
+    lda tmp_cycle_msb
+    cmp food_cycle_msb
     bcc cell_behind_target
     bne cell_ahead_of_target
     lda tmp_cycle_lsb
-    cmp comp_lsb
+    cmp food_cycle_lsb
     bcc cell_behind_target
     beq cell_behind_target
     bne cell_ahead_of_target
@@ -498,25 +511,21 @@ cell_ahead_of_target:
 
     clc
     lda tmp_cycle_lsb
-    adc comp_lsb
+    adc food_cycle_lsb
     sta tmp_cycle_lsb
     lda tmp_cycle_msb
-    adc comp_msb
+    adc food_cycle_msb
     sta tmp_cycle_msb
     rts
-
 cell_behind_target:  
-    sec                           // cell is behind target
-    lda comp_lsb                  // subtract cell cycle number from targets.
+    sec                                 // cell is behind target
+    lda food_cycle_lsb                  // subtract cell cycle number from targets.
     sbc tmp_cycle_lsb
     sta tmp_cycle_lsb
-    lda comp_msb
+    lda food_cycle_msb
     sbc tmp_cycle_msb
     sta tmp_cycle_msb
     rts
-
-
-
 
 lookup_cycle:                     // looks up cycle lsb/msb indexed by x and y. stored in tmp_cycle_lsb/msb
     lda cycle_table, x
@@ -1071,14 +1080,6 @@ up_dist_msb:        .byte 0
 right_dist_msb:     .byte 0
 down_dist_msb:      .byte 0
 left_dist_msb:      .byte 0
-opt_a_lsb:          .byte 0
-opt_b_lsb:          .byte 0
-opt_c_lsb:          .byte 0
-opt_a_msb:          .byte 0
-opt_b_msb:          .byte 0
-opt_c_msb:          .byte 0
-comp_lsb:           .byte 0
-comp_msb:           .byte 0
 up_cycle_lsb:       .byte 0
 right_cycle_lsb:    .byte 0
 down_cycle_lsb:     .byte 0
@@ -1093,6 +1094,9 @@ tmp_dist_1_lsb:     .byte 0
 tmp_dist_1_msb:     .byte 0
 tmp_dist_2_lsb:     .byte 0
 tmp_dist_2_msb:     .byte 0
+safe_tail:          .byte 0
+safe_head:          .byte 0
+safe:               .byte 0
 
 screen_table:         .lohifill 25, screen + [i * 40]     // table of the memory locations for the first column in each row
 column_walls_table:   .fill [width / 2], i * [[height / 2] -1]
