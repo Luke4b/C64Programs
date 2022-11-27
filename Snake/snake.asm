@@ -208,8 +208,8 @@ print_stuff:{           // PRINT STUFF FOR DIAGNOSTIC PURPOSE
 }
 
 WAIT_KEY:
-    jsr $FFE4         // Calling KERNAL GETIN 
-    beq WAIT_KEY      // If Z, no key was pressed, so try again.
+ //   jsr $FFE4         // Calling KERNAL GETIN 
+ //   beq WAIT_KEY      // If Z, no key was pressed, so try again.
 
 
 
@@ -250,7 +250,7 @@ auto_mode: {    // calculates which cell go to next and fakes the correct keyboa
     sta tail_cycle_msb
     lda tmp_cycle_lsb
     sta tail_cycle_lsb
- 
+    
 //find cycle values for each direction
     jsr get_up
     jsr get_right
@@ -456,16 +456,27 @@ snake_check:
     if the tail > head, safe options are >head AND <tail
     if the head > tail, safe options are >head OR  <tail
 */
-    sec                 // check if tail > option cell
-    lda tail_cycle_lsb
-    sbc tmp_cycle_lsb
+    // check if tail >= option cell
     lda tail_cycle_msb
-    sbc tmp_cycle_msb
-    rol                 // rotate the carry into bit 0.
-    and #%00000001      // get rid of the rest
+    cmp tmp_cycle_msb
+    bcc tail_less            // tail < option cell
+    bne tail_greater         // tail > option cell
+    lda tail_cycle_lsb
+    cmp tmp_cycle_lsb
+    bcc tail_less            // tail < option cell
+    beq tail_equal           // tail = option cell
+    bne tail_greater         //tail > option cell
+
+tail_less:
+tail_equal:
+    lda #%00000000
+    sta safe_tail
+    jmp !+
+tail_greater:
+    lda #%00000001
     sta safe_tail
 
-    sec                 // check if the option cell > head
+!:  sec                 // check if the option cell > head
     lda tmp_cycle_lsb
     sbc cycle_lsb
     lda tmp_cycle_msb
@@ -617,12 +628,17 @@ step: {
     rts
 
 reset:
+    nop
+    jsr $FFE4      // Calling KERNAL GETIN 
+    nop
+    jsr $FFE4
+    beq reset      // If zero, no key was pressed, so try again.
+
     tsx
     inx
     inx
     txs
     jmp menu
-
 }
 
 collision_check:  {
@@ -634,6 +650,8 @@ collision_check:  {
     cmp food_col
     beq fed
 
+    // check the snake has moved onto an empty space, if not, and the space doesn't contain food then
+    // it must have hit itself.
 !:  ldx head_row
     ldy head_column
     lda screen_table, x
