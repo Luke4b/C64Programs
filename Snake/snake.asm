@@ -14,8 +14,8 @@ BasicUpstart2(main)
 .label food_char = $3f    // character to be used for food.
 
 .label random = $D41B       // address of random numbers from SID
-.label width = 8          // maximum 40 must be even number
-.label height = 8        // maximum 24 must be even number
+.label width = 24           // maximum 40 must be even number
+.label height = 24          // maximum 24 must be even number
 .label screen = $0400
 
 .label the_row = head_row           //reused these variables during mazegen
@@ -132,38 +132,38 @@ game: {
     jsr clear_screen        // clear screen
     jsr spawn_food          // spawn initial piece of food
 
-    ldx #$28
-    lda #$01                // set colour of bottom row
-!:  sta $d800 + [24*40], x
-    dex
-    bpl !-
+//     ldx #$28
+//     lda #$01                // set colour of bottom row
+// !:  sta $d800 + [24*40], x
+//     dex
+//     bpl !-
 
-        //print stuff to debug
-.var i=0
-.for (;i<6;) {
-        ldx #[40 * i]
-        ldy #00
-    !:  lda cycle + [i * 40], y
-        jsr PrintHexValue
-        iny
-        inx
-        cpy #8
-        bne !-
-        .eval i++
-}
-        //print stuff to debug
-.var j=0
-.for (;j<2;) {
-        ldx #[40 * j]
-        ldy #00
-    !:  lda cycle + [6 * 40] + [40 * j], y
-        jsr PrintHexValue2
-        iny
-        inx
-        cpy #8
-        bne !-
-        .eval j++
-}
+//         //print stuff to debug
+// .var i=0
+// .for (;i<6;) {
+//         ldx #[40 * i]
+//         ldy #00
+//     !:  lda cycle + [i * 40], y
+//         jsr PrintHexValue
+//         iny
+//         inx
+//         cpy #8
+//         bne !-
+//         .eval i++
+// }
+//         //print stuff to debug
+// .var j=0
+// .for (;j<2;) {
+//         ldx #[40 * j]
+//         ldy #00
+//     !:  lda cycle + [6 * 40] + [40 * j], y
+//         jsr PrintHexValue2
+//         iny
+//         inx
+//         cpy #8
+//         bne !-
+//         .eval j++
+// }
 
 
 loop:
@@ -172,42 +172,42 @@ loop:
 //    beq !+
     jsr auto_mode           // use the hamiltian path to fake keyboard input
 
-print_stuff:{           // PRINT STUFF FOR DIAGNOSTIC PURPOSE
+// print_stuff:{           // PRINT STUFF FOR DIAGNOSTIC PURPOSE
 
-    ldx #25
-    lda cycle_lsb
-    jsr PrintHexValue2
+//     ldx #25
+//     lda cycle_lsb
+//     jsr PrintHexValue2
     
-    // distances
+//     // distances
 
-    ldx #30
-    lda up_dist_lsb
-    jsr PrintHexValue
+//     ldx #30
+//     lda up_dist_lsb
+//     jsr PrintHexValue
 
-    ldx #[30 - 3 + [2*40]]
-    lda left_dist_lsb
-    jsr PrintHexValue
+//     ldx #[30 - 3 + [2*40]]
+//     lda left_dist_lsb
+//     jsr PrintHexValue
 
-    ldx #[30 + 3 + [2*40]]
-    lda right_dist_lsb
-    jsr PrintHexValue
+//     ldx #[30 + 3 + [2*40]]
+//     lda right_dist_lsb
+//     jsr PrintHexValue
 
-    ldx #[30 + [4*40]]
-    lda down_dist_lsb
-    jsr PrintHexValue
+//     ldx #[30 + [4*40]]
+//     lda down_dist_lsb
+//     jsr PrintHexValue
 
-    //targets
+//     //targets
 
-    ldx #[42 - 6]
-    lda tail_cycle_lsb
-    jsr PrintHexValue
+//     ldx #[42 - 6]
+//     lda tail_cycle_lsb
+//     jsr PrintHexValue
 
-    ldx #[42 - 6 + [4*40]]
-    lda food_cycle_lsb
-    jsr PrintHexValue
-}
+//     ldx #[42 - 6 + [4*40]]
+//     lda food_cycle_lsb
+//     jsr PrintHexValue
+// }
 
-WAIT_KEY:
+//WAIT_KEY:
  //   jsr $FFE4         // Calling KERNAL GETIN 
  //   beq WAIT_KEY      // If Z, no key was pressed, so try again.
 
@@ -1008,7 +1008,7 @@ high_speed:
     ldy #$20
     jmp delay_loop
 super_speed:
-    ldy #$25
+    ldy #$10
     jmp delay_loop
 }
 

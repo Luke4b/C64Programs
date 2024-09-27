@@ -1,0 +1,91 @@
+.label blank=$d4e
+.label column_walls=$f00
+.label tmprow=$d4f
+.label PrintHexValue=$d2f {
+  .label PrintHexNybble=$d3a
+  .label PHN_Print=$d44
+  .label PHN_IsDigit=$d3e
+  .label PHN_IsLetter=$d42
+}
+.label adjacency_length=$d4d
+.label main=$810 {
+  .label start=$82d
+}
+.label maze_table=$e52
+.label the_row=$fa
+.label vertwall_char=$e7
+.label screen_lsb=$fc
+.label maze=$1200
+.label screen_msb=$fd
+.label tmp2=$d4a
+.label cycle=$3800
+.label random=$d41b
+.label number=$d4b
+.label tiles=$ea9
+.label cycle_msb_table=$e90
+.label cycle_msb=$d53
+.label maze_gen=$850 {
+  .label colour_cell=$8f0
+  .label pick_adjacent=$9d6 {
+  }
+  .label initial_cell=$850
+  .label maze_gen_loop=$87f
+  .label add_adjacencies=$927 {
+    .label main_routine=$927 {
+      .label not_leftmost=$971
+      .label not_bottom=$930
+      .label not_rightmost=$95d
+      .label not_top=$944
+    }
+    .label add_adj_lists=$982 {
+      .label next=$9b2
+      .label not_in_maze=$99d
+      .label loop=$9a0
+      .label first=$9b9
+    }
+  }
+  .label create_passage=$a22 {
+    .label check_maze=$b0c
+    .label invert_direction=$b55
+    .label draw_passage=$b21
+    .label swap_coords=$b7c
+    .label blah=$b95
+  }
+  .label draw_cell=$8aa
+  .label add_cell=$894
+}
+.label cycle_lsb=$d52
+.label screen_table=$e00
+.label adjacency_rows=$1100
+.label row_walls_table=$e46
+.label height=$18
+.label direction=$d4c
+.label temp=$d49
+.label horizwall_char=$ef
+.label follow_maze=$ba9 {
+  .label check_col_wall=$cae
+  .label get_col_wall=$cc5
+  .label get_row_wall=$cf2
+  .label loop=$bbf
+  .label step=$c3b
+  .label draw=$bfb
+  .label turn_left=$c9e
+  .label check_row_wall=$cdb
+  .label turn_right=$c8c
+}
+.label cycle_table=$e5e
+.label adjacency_columns=$1180
+.label column_walls_table=$e32
+.label block_char=$a0
+.label clear_screen=$d08
+.label tmpcol=$d50
+.label colour=$d51
+.label delay=$d1c
+.label delay_loop=$d24
+.label width=$28
+.label tmp_lsb=$fe
+.label cls_loop=$d0c
+.label row_walls=$1000
+.label the_column=$fb
+.label wallcorner_char=$fa
+.label tmp_msb=$ff
